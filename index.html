@@ -181,12 +181,13 @@
 
         const AREAS = [
             'anterior frontal', 'anterior fronto-parietal', 'anterior parietal',
-            'basal ganglia', 'cingulate', 'frontal',  // cingulate 在这里
+            'basal ganglia',  // 只保留一种形式（ganglia)，移除 ganglion
+            'cingulate', 'frontal',
             'fronto-parietal', 'inferior frontal', 'medial temporal', 'mesial temporal',
             'occipital', 'parietal', 'parieto-temporal', 'posterior cingulate',
             'posterior fronto-parietal', 'posterior parietal', 'posterior temporal',
             'precuneus', 'temporal', 'temporo-occipital', 'thalamus',
-            'basal ganglion', 'insular', 'anterior cingulate', 'anterior temporal'
+            'insular', 'anterior cingulate', 'anterior temporal'
         ];
 
         const SEVERITIES = ['', 'moderate', 'slight', 'mild', 'marked'];
@@ -218,61 +219,72 @@
             });
         }
 
-function createSearchableInput(row) {
-    const container = document.createElement('div');
-    container.className = 'search-container';
+        function createSearchableInput(row) {
+            const container = document.createElement('div');
+            container.className = 'search-container';
 
-    const input = document.createElement('input');
-    input.className = 'search-input';
-    input.placeholder = 'Type to search...';
+            const input = document.createElement('input');
+            input.className = 'search-input';
+            input.placeholder = 'Type to search...';
 
-    const dropdown = document.createElement('div');
-    dropdown.className = 'dropdown';
+            const dropdown = document.createElement('div');
+            dropdown.className = 'dropdown';
 
-    input.addEventListener('input', () => {
-        const searchTerm = input.value.toLowerCase();
-        const matches = LOCATIONS.filter(loc => {
-            const currentSeverity = locationStatusMap.get(loc);
-            return loc.toLowerCase().includes(searchTerm) && !currentSeverity;
-        });
+            // 添加显示转换函数
+            const formatDisplayLocation = (location) => {
+                if (location.includes('basal ganglia') && 
+                    (location.startsWith('left ') || location.startsWith('right '))) {
+                    return location.replace('basal ganglia', 'basal ganglion');
+                }
+                return location;
+            };
 
-        dropdown.innerHTML = '';
-        matches.forEach(match => {
-            const item = document.createElement('div');
-            item.className = 'dropdown-item';
-            item.textContent = match;
-            item.addEventListener('click', () => {
-                input.value = match;
-                dropdown.style.display = 'none';
-                
-                const select = row.querySelector('select');
-                // 只在选择位置时设置为 moderate
-                select.value = 'moderate';
-                locationStatusMap.set(match, 'moderate');
-                
-                checkAndAddNewRow();
+            input.addEventListener('input', () => {
+                const searchTerm = input.value.toLowerCase();
+                const matches = LOCATIONS.filter(loc => {
+                    const currentSeverity = locationStatusMap.get(loc);
+                    return loc.toLowerCase().includes(searchTerm) && !currentSeverity;
+                });
+
+                dropdown.innerHTML = '';
+                matches.forEach(match => {
+                    const item = document.createElement('div');
+                    item.className = 'dropdown-item';
+                    // 显示转换后的文本
+                    item.textContent = formatDisplayLocation(match);
+                    item.addEventListener('click', () => {
+                        // 显示转换后的文本，但存储原始值
+                        input.value = formatDisplayLocation(match);
+                        dropdown.style.display = 'none';
+                        
+                        const select = row.querySelector('select');
+                        select.value = 'moderate';
+                        // 存储原始值
+                        locationStatusMap.set(match, 'moderate');
+                        
+                        checkAndAddNewRow();
+                    });
+                    dropdown.appendChild(item);
+                });
+
+                dropdown.style.display = matches.length ? 'block' : 'none';
             });
-            dropdown.appendChild(item);
-        });
 
-        dropdown.style.display = matches.length ? 'block' : 'none';
-    });
+            input.addEventListener('focus', () => {
+                const event = new Event('input');
+                input.dispatchEvent(event);
+            });
 
-    input.addEventListener('focus', () => {
-        const event = new Event('input');
-        input.dispatchEvent(event);
-    });
+            document.addEventListener('click', (e) => {
+                if (!container.contains(e.target)) {
+                    dropdown.style.display = 'none';
+                }
+            });
 
-    document.addEventListener('click', (e) => {
-        if (!container.contains(e.target)) {
-            dropdown.style.display = 'none';
+            container.appendChild(input);
+            container.appendChild(dropdown);
+            return container;
         }
-    });
-
-    container.appendChild(input);
-    container.appendChild(dropdown);
-    return container;
-}
 
 
         function createSelect(options) {
@@ -439,7 +451,12 @@ function createSearchableInput(row) {
                     return r.area;
                 } else {
                     const sidePrefix = r.side ? `${r.side} ` : '';
-                    return `${sidePrefix}${r.area}`;
+                    // 处理 basal ganglia/ganglion 的特殊情况
+                    let area = r.area;
+                    if (area === 'basal ganglia' && r.side && r.side !== 'bilateral') {
+                        area = 'basal ganglion';  // 单侧时使用单数形式
+                    }
+                    return `${sidePrefix}${area}`;
                 }
             });
             
