@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>ECD Report Generator</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .delete-btn {
+        background: none;
+        border: none;
+        color: #ff4444;
+        cursor: pointer;
+        padding: 8px;
+        font-size: 16px;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .delete-btn:hover {
+        background: #ffeeee;
+        border-radius: 4px;
+    }
+
+    .container {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 20px;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .input-section {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .header-row {
+      display: grid;
+      grid-template-columns: 3fr 1fr;
+      gap: 10px;
+      font-weight: bold;
+      padding: 10px 0;
+      border-bottom: 1px solid #eee;
+    }
+
+    .input-row {
+        display: grid;
+        grid-template-columns: auto 3fr 1fr;
+        gap: 10px;
+        margin-bottom: 5px;
+        align-items: center;
+    }
+
+    .search-container {
+      position: relative;
+    }
+
+    .search-input,
+    select {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: white;
+      font-size: 14px;
+    }
+
+    .dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      width: 100%;
+      max-height: 200px;
+      overflow-y: auto;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      z-index: 1000;
+      display: none;
+    }
+
+    .dropdown-item {
+      padding: 8px;
+      cursor: pointer;
+    }
+
+    .dropdown-item:hover {
+      background: #f5f5f5;
+    }
+
+    select {
+      height: 35px;
+      -webkit-appearance: menulist;
+      appearance: menulist;
+    }
+
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    button {
+      padding: 12px;
+      border: none;
+      border-radius: 4px;
+      background: #5cb85c;
+      color: white;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    button:hover {
+      background: #4cae4c;
+    }
+
+    .reminder {
+      margin-top: 10px;
+      color: #666;
+      font-size: 14px;
+    }
+
+    .notification {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 12px 20px;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      border-radius: 4px;
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="input-section">
+      <div class="header-row">
+        <div>Location</div>
+        <div>Severity</div>
+      </div>
+      <div id="input-grid">
+      </div>
+    </div>
+    <div class="sidebar">
+      <button onclick="copyReport('findings')">Copy Findings</button>
+      <button onclick="copyReport('impression')">Copy Impression</button>
+      <button onclick="copyReport('alz')">Copy Impression (ALZ)</button>
+      <button onclick="copyReport('dlb')">Copy Impression (DLB)</button>
+      <button onclick="clearTable()">Clear</button>
+      <div class="reminder">Remember to check the MR/CT!</div>
+    </div>
+  </div>
+  <div id="notification" class="notification"></div>
+
+  <script>
+    // 確保在頁面加載完成後執行初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initLocationMap();  // 初始化位置映射
+            checkAndAddNewRow();  // 添加第一個輸入行
+        });
+        // Constants
+        const BILATERAL_ONLY_AREAS = [
+            'cerebral fissures',
+            'ventricles',
+            'brain stem'
+        ];
+
+        const AREAS = [
+            'anterior frontal', 'anterior fronto-parietal', 'anterior parietal',
+            'basal ganglia', 'cingulate', 'frontal',  // cingulate 在这里
+            'fronto-parietal', 'inferior frontal', 'medial temporal', 'mesial temporal',
+            'occipital', 'parietal', 'parieto-temporal', 'posterior cingulate',
+            'posterior fronto-parietal', 'posterior parietal', 'posterior temporal',
+            'precuneus', 'temporal', 'temporo-occipital', 'thalamus',
+            'basal ganglion', 'insular', 'anterior cingulate', 'anterior temporal'
+        ];
+
+        const SEVERITIES = ['', 'moderate', 'slight', 'mild', 'marked'];
+        const SIDES = ['left', 'right', 'bilateral'];
+
+        // Generate all possible combinations
+        const LOCATIONS = [];
+        
+        // Add bilateral-only areas
+        BILATERAL_ONLY_AREAS.forEach(area => {
+            LOCATIONS.push(area);
+        });
+
+        // Add areas that need sides
+        AREAS.forEach(area => {
+            SIDES.forEach(side => {
+                LOCATIONS.push(`${side} ${area}`);
+            });
+        });
+
+        // State management
+        let locationStatusMap = new Map();
+
+        // Initialize location map
+        function initLocationMap() {
+            locationStatusMap.clear();
+            LOCATIONS.forEach(location => {
+                locationStatusMap.set(location, '');
+            });
+        }
+
+function createSearchableInput(row) {
+    const container = document.createElement('div');
+    container.className = 'search-container';
+
+    const input = document.createElement('input');
+    input.className = 'search-input';
+    input.placeholder = 'Type to search...';
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'dropdown';
+
+    input.addEventListener('input', () => {
+        const searchTerm = input.value.toLowerCase();
+        const matches = LOCATIONS.filter(loc => {
+            const currentSeverity = locationStatusMap.get(loc);
+            return loc.toLowerCase().includes(searchTerm) && !currentSeverity;
+        });
+
+        dropdown.innerHTML = '';
+        matches.forEach(match => {
+            const item = document.createElement('div');
+            item.className = 'dropdown-item';
+            item.textContent = match;
+            item.addEventListener('click', () => {
+                input.value = match;
+                dropdown.style.display = 'none';
+                
+                const select = row.querySelector('select');
+                // 只在选择位置时设置为 moderate
+                select.value = 'moderate';
+                locationStatusMap.set(match, 'moderate');
+                
+                checkAndAddNewRow();
+            });
+            dropdown.appendChild(item);
+        });
+
+        dropdown.style.display = matches.length ? 'block' : 'none';
+    });
+
+    input.addEventListener('focus', () => {
+        const event = new Event('input');
+        input.dispatchEvent(event);
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!container.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+
+    container.appendChild(input);
+    container.appendChild(dropdown);
+    return container;
+}
+
+
+        function createSelect(options) {
+            const select = document.createElement('select');
+            options.forEach(option => {
+                const opt = document.createElement('option');
+                opt.value = option;
+                opt.textContent = option;
+                select.appendChild(opt);
+            });
+            
+            select.addEventListener('change', (e) => {
+                const row = e.target.closest('.input-row');
+                const input = row.querySelector('.search-input');
+                if (input.value) {
+                    locationStatusMap.set(input.value, e.target.value);
+                }
+                checkAndAddNewRow();
+            });
+            
+            return select;
+        }
+
+        // 在 script 标签中找到原来的 createRow 函数并替换
+        function createRow() {
+            const row = document.createElement('div');
+            row.className = 'input-row';
+            
+            // 创建删除按钮
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.innerHTML = '×';
+            deleteBtn.title = 'Delete row';
+            deleteBtn.onclick = (e) => {
+                e.preventDefault();
+                const thisRow = e.target.closest('.input-row');
+                const input = thisRow.querySelector('.search-input');
+                
+                // 如果这行有数据，从 locationStatusMap 中删除
+                if (input.value) {
+                    locationStatusMap.delete(input.value);
+                }
+                
+                // 删除行
+                thisRow.remove();
+                
+                // 如果删除后没有空行，添加一个新行
+                checkAndAddNewRow();
+            };
+            
+            const searchableInput = createSearchableInput(row);
+            const severitySelect = createSelect(SEVERITIES);
+            
+            row.appendChild(deleteBtn);
+            row.appendChild(searchableInput);
+            row.appendChild(severitySelect);
+            
+            severitySelect.value = '';
+            
+            return row;
+        }
+
+        function checkAndAddNewRow() {
+            const rows = document.querySelectorAll('.input-row');
+            const lastRow = rows[rows.length - 1];
+            
+            if (!lastRow) {
+                const newRow = createRow();
+                document.getElementById('input-grid').appendChild(newRow);
+                return;
+            }
+
+            const input = lastRow.querySelector('.search-input');
+            const select = lastRow.querySelector('select');
+            
+            if (input.value.trim() !== '') {
+                locationStatusMap.set(input.value, select.value);
+                const newRow = createRow();
+                document.getElementById('input-grid').appendChild(newRow);
+            }
+        }
+
+
+        function collectDataFromRows() {
+            const rows = document.querySelectorAll('.input-row');
+            const currentData = [];
+            
+            rows.forEach(row => {
+                const input = row.querySelector('.search-input');
+                const select = row.querySelector('select');
+                
+                if (input.value && select.value) {
+                    let location = input.value;
+                    let side = '';
+                    let area = location;
+                    
+                    // 处理位置和侧面信息
+                    if (!BILATERAL_ONLY_AREAS.includes(location)) {
+                        SIDES.forEach(s => {
+                            if (location.startsWith(s + ' ')) {
+                                side = s;
+                                area = location.substring(s.length + 1);
+                            }
+                        });
+                    }
+
+                    currentData.push({
+                        side: side,
+                        area: area,
+                        severity: select.value,
+                        fullLocation: location
+                    });
+                }
+            });
+            
+            return currentData;
+        }
+        function getTableData() {
+            const data = [];
+            for (const [location, severity] of locationStatusMap) {
+                if (severity) {
+                    let side = '';
+                    let area = location;
+                    
+                    if (!BILATERAL_ONLY_AREAS.includes(location)) {
+                        SIDES.forEach(s => {
+                            if (location.startsWith(s + ' ')) {
+                                side = s;
+                                area = location.substring(s.length + 1);
+                            }
+                        });
+                    }
+
+                    data.push({
+                        side: side,
+                        area: area,
+                        severity: severity,
+                        fullLocation: location
+                    });
+                }
+            }
+            return data;
+        }
+
+        // 在 script 标签中找到原来的 formatRegions 函数并替换
+        function formatRegions(regions, desc) {
+            if (regions.length === 0) return '';
+            
+            // 创建一个映射来存储完整位置及其在原始数组中的索引
+            const locationOrder = new Map();
+            LOCATIONS.forEach((loc, index) => {
+                locationOrder.set(loc, index);
+            });
+            
+            // 按照原始数组的顺序排序区域
+            const sortedRegions = [...regions].sort((a, b) => {
+                const aFullLoc = a.side ? `${a.side} ${a.area}` : a.area;
+                const bFullLoc = b.side ? `${b.side} ${b.area}` : b.area;
+                return locationOrder.get(aFullLoc) - locationOrder.get(bFullLoc);
+            });
+            
+            const locDescriptions = sortedRegions.map(r => {
+                if (BILATERAL_ONLY_AREAS.includes(r.area)) {
+                    return r.area;
+                } else {
+                    const sidePrefix = r.side ? `${r.side} ` : '';
+                    return `${sidePrefix}${r.area}`;
+                }
+            });
+            
+            if (locDescriptions.length === 1) {
+                return `${desc} in the ${locDescriptions[0]} region`;
+            }
+            if (locDescriptions.length === 2) {
+                return `${desc} in the ${locDescriptions[0]} and ${locDescriptions[1]} regions`;
+            }
+            return `${desc} in the ${locDescriptions.slice(0, -1).join(', ')}, and ${locDescriptions[locDescriptions.length - 1]} regions`;
+        }
+
+        function createHypoperfusionText(regions, message) {
+            if (regions.length === 0) return '';
+            const regionText = regions.join(", ") + " region" + (regions.length > 1 ? "s" : "");
+            return "Hypoperfusion in the " + regionText + " " + message;
+        }
+
+        function capitalizeFirstLetter(string) {
+            return string.charAt(0).toUpperCase() + string.slice(1);
+        }
+
+        function generateReports() {
+            // 直接从显示的 rows 获取最新数据
+            const data = collectDataFromRows();
+            console.log('Current data from rows:', data);
+            
+            const regAlz = ["posterior cingulate", "posterior parietal", "precuneus"];
+            const regDlb = ["occipital"];
+            const regAtr = ["cerebral fissures", "ventricles"];
+
+            const valAtr = data.filter(x => regAtr.includes(x.area));
+            const valDef = data.filter(x => !regAtr.includes(x.area));
+            const valMar = valDef.filter(x => x.severity === 'marked');
+            const valMod = valDef.filter(x => x.severity === 'moderate');
+            const valMil = valDef.filter(x => x.severity === 'mild');
+            const valSli = valDef.filter(x => x.severity === 'slight');
+
+            const txtMar = formatRegions(valMar, 'markedly decreased radioactivity');
+            const txtMod = formatRegions(valMod, 'decreased radioactivity');
+            const txtMil = formatRegions(valMil, 'mildly decreased radioactivity');
+            const txtSli = formatRegions(valSli, 'slightly decreased radioactivity');
+            const txtAtr = valAtr.length === 0 ? "" : 
+                        ('\nProminent' + formatRegions(valAtr, "")).replace(" in", "").replace(" regions", "").replace(" region", "");
+
+            const txtFnd = valMar.concat(valMod, valMil, valSli, valAtr).length === 0 ? 
+                'Tc-99m ECD brain perfusion scan with SPECT shows no definite abnormal radioactivity in the brain.' :
+                'Tc-99m ECD brain perfusion scan with SPECT shows ' + [txtMar, txtMod, txtMil, txtSli].filter(x => x !== '').join("; ") + "." + txtAtr;
+
+            let txtImp = valMar.concat(valMod, valMil, valSli, valAtr).length === 0 ?
+                'No definite abnormal cerebral perfusion detected.' :
+                txtFnd.replace('Tc-99m ECD brain perfusion scan with SPECT shows ', '')
+                    .replace('markedly decreased radioactivity', 'marked hypoperfusion')
+                    .replace('decreased radioactivity', 'hypoperfusion')
+                    .replace('mildly decreased radioactivity', 'mild hypoperfusion')
+                    .replace('slightly decreased radioactivity', 'suspicious hypoperfusion');
+
+            const posAlz = regAlz.filter(x => {
+                return valDef.some(d => d.area === x);
+            });
+            const posDlb = regDlb.filter(x => {
+                return valDef.some(d => d.area === x);
+            });
+
+            let txtAlz = createHypoperfusionText(posAlz, "has been reported to be commonly observed in patients with Alzheimer's disease.");
+            let txtDlb = createHypoperfusionText(posDlb, "is considered a supportive biomarker of dementia with Lewy bodies.");
+
+            const txtAlzCor = posDlb.length > 0 ? 
+                ` ${posAlz.length > 0 ? "However" : "Besides"}, hypoperfusion in the occipital area is usually not observed in Alzheimer's disease. Clinical correlation is recommended.` : "";
+            const txtDlbCor = posAlz.length > 0 ? " Clinical correlation is recommended." : "";
+
+            txtAlz = txtAlz || "There is no apparently decreased perfusion in the parietal association areas, posterior cingulate, precuneus, which are the regions commonly affected in Alzheimer's disease.";
+            txtDlb = txtDlb || "There is no definite evidence of occipital hypoperfusion, a supportive biomarker of dementia with Lewy bodies, observed in this patient.";
+
+            let impressions = [];
+            if (txtImp.includes('Prominent')) {
+                impressions.push(txtImp.split('Prominent')[0].trim());
+                impressions.push("Suspect cerebral atrophy.");
+            } else {
+                impressions.push(txtImp);
+            }
+
+            impressions = impressions.map(x => capitalizeFirstLetter(x)).filter(x => x.length > 3);
+            txtImp = impressions.length > 1 ?
+                impressions.map((f, index) => (index + 1) + ". " + f).join("\n") :
+                impressions.join("");
+
+            txtAlz = impressions.length > 1 ?
+                ([impressions[0].includes("operfusion") ? impressions[0] + " " + txtAlz + txtAlzCor : impressions[0]]
+                    .concat(impressions.slice(1))).map((f, index) => (index + 1) + ". " + f).join("\n") :
+                ([impressions[0].includes("operfusion") ? impressions[0] + " " + txtAlz + txtAlzCor : impressions[0]]
+                    .concat(impressions.slice(1))).join("");
+
+            txtDlb = impressions.length > 1 ?
+                ([impressions[0].includes("operfusion") ? impressions[0] + " " + txtDlb + txtDlbCor : impressions[0]]
+                    .concat(impressions.slice(1))).map((f, index) => (index + 1) + ". " + f).join("\n") :
+                ([impressions[0].includes("operfusion") ? impressions[0] + " " + txtDlb + txtDlbCor : impressions[0]]
+                    .concat(impressions.slice(1))).join("");
+
+            return {
+                findings: txtFnd,
+                impression: txtImp,
+                alz: txtAlz,
+                dlb: txtDlb
+            };
+        }
+
+        function clearTable() {
+            const grid = document.getElementById('input-grid');
+            grid.innerHTML = '';
+            initLocationMap();  // 重置位置映射
+            checkAndAddNewRow();
+            showNotification('Table cleared');
+        }
+
+        function showNotification(message) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.style.display = 'block';
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 2000);
+        }
+
+        async function copyReport(type) {
+            try {
+                // 每次复制前重新从 UI 生成报告
+                const reports = generateReports();
+                const text = reports[type];
+                
+                // Fallback copy method using textarea
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                
+                try {
+                    await navigator.clipboard.writeText(text);
+                } catch {
+                    document.execCommand('copy');
+                }
+                
+                document.body.removeChild(textArea);
+                showNotification('Copied to clipboard');
+            } catch (err) {
+                console.error('Copy failed:', err);
+                showNotification('Failed to copy');
+            }
+        }
+  </script>
