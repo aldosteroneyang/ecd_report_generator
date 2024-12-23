@@ -179,16 +179,31 @@
             'brain stem'
         ];
 
-        const AREAS = [
-            'anterior frontal', 'anterior fronto-parietal', 'anterior parietal',
-            'basal ganglia',  // 只保留一种形式（ganglia)，移除 ganglion
-            'cingulate', 'frontal',
-            'fronto-parietal', 'inferior frontal', 'medial temporal', 'mesial temporal',
-            'occipital', 'parietal', 'parieto-temporal', 'posterior cingulate',
+	const AREAS = [
+            // 主要大腦葉區域
+            'frontal', 'parietal', 'temporal', 'occipital',
+            
+            // 複合區域
+            'fronto-parietal', 'parieto-temporal', 'temporo-occipital',
+            
+            // 前部區域
+            'anterior frontal', 'anterior fronto-parietal', 'anterior parietal', 'anterior temporal',
+            
+            // 後部區域
             'posterior fronto-parietal', 'posterior parietal', 'posterior temporal',
-            'precuneus', 'temporal', 'temporo-occipital', 'thalamus',
-            'insular', 'anterior cingulate', 'anterior temporal'
+            
+            // 特定功能區域
+            'inferior frontal',
+            
+            // 內側和深部結構
+            'cingulate', 'anterior cingulate', 'posterior cingulate',
+            'medial temporal', 'mesial temporal',
+            'precuneus',
+            'basal ganglia',
+            'thalamus',
+            'insular'
         ];
+
 
         const SEVERITIES = ['', 'moderate', 'slight', 'mild', 'marked'];
         const SIDES = ['left', 'right', 'bilateral'];
