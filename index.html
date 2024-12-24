@@ -765,6 +765,48 @@ const AREAS = [
           return string.charAt(0).toUpperCase() + string.slice(1);
       }
 
+
+      function pluralizeRegions(text) {
+        // Helper function to process a single part
+        function processRegionText(part) {
+          if (part.trim().endsWith('region')) {
+            if (part.includes(' and ') || part.includes('bilateral')) {
+              return part.replace(/region$/, 'regions');
+            }
+          }
+          return part;
+        }
+
+        // First split by semicolons
+        let semicolonParts = text.split(';');
+        
+        // Process each semicolon-separated part, which might contain periods
+        return semicolonParts.map(semicolonPart => {
+          // Split each semicolon part by periods
+          let periodParts = semicolonPart.split('.');
+          
+          // Process each period-separated part
+          return periodParts.map(periodPart => {
+            return processRegionText(periodPart.trim());
+          }).join('.');  // Rejoin with periods
+        }).join(';');  // Rejoin with semicolons
+      }
+
+      function processReportText(text) {
+        if (!text) return text;
+        
+        // If there are no semicolons or periods, process the whole text
+        if (!text.includes(';') && !text.includes('.')) {
+          if (text.endsWith('region') && 
+              (text.includes(' and ') || text.includes('bilateral'))) {
+            return text.replace(/region$/, 'regions');
+          }
+          return text;
+        }
+        
+        // Process text with pluralization
+        return pluralizeRegions(text);
+      }
       function generateReports() {
           // 直接从显示的 rows 获取最新数据
           const data = collectDataFromRows();
@@ -788,7 +830,7 @@ const AREAS = [
           const txtAtr = valAtr.length === 0 ? "" : 
                       ('\nProminent' + formatRegions(valAtr, "")).replace(" in", "").replace(" regions", "").replace(" region", "");
 
-          const txtFnd = valMar.concat(valMod, valMil, valSli, valAtr).length === 0 ? 
+          let txtFnd = valMar.concat(valMod, valMil, valSli, valAtr).length === 0 ? 
               'Tc-99m ECD brain perfusion scan with SPECT shows no definite abnormal radioactivity in the brain.' :
               'Tc-99m ECD brain perfusion scan with SPECT shows ' + [txtMar, txtMod, txtMil, txtSli].filter(x => x !== '').join("; ") + "." + txtAtr;
 
@@ -842,6 +884,14 @@ const AREAS = [
               ([impressions[0].includes("operfusion") ? impressions[0] + " " + txtDlb + txtDlbCor : impressions[0]]
                   .concat(impressions.slice(1))).join("");
 
+          txtFnd = processReportText(txtFnd);
+          
+          // // Process the impression text
+          txtImp = processReportText(txtImp);
+
+          // Also process Alzheimer's and DLB texts
+          txtAlz = processReportText(txtAlz);
+          txtDlb = processReportText(txtDlb);
           return {
               findings: txtFnd,
               impression: txtImp,
@@ -869,27 +919,52 @@ const AREAS = [
 
       async function copyReport(type) {
           try {
-              // 每次复制前重新从 UI 生成报告
-              const reports = generateReports();
-              const text = reports[type];
+              // Debug output
+              console.log('Starting copy process for type:', type);
               
-              // Fallback copy method using textarea
+              const reports = generateReports();
+              console.log('Generated reports:', reports);
+              
+              const text = reports[type];
+              console.log('Text to copy:', text);
+              
+              if (text === undefined || text === null) {
+                  throw new Error('No text generated');
+              }
+
+              // Create and append textarea
               const textArea = document.createElement('textarea');
               textArea.value = text;
+              textArea.style.position = 'fixed';  // Make it invisible
+              textArea.style.opacity = '0';
               document.body.appendChild(textArea);
+              
+              // Select and copy
+              textArea.focus();
               textArea.select();
               
               try {
+                  // Try modern clipboard API first
                   await navigator.clipboard.writeText(text);
-              } catch {
-                  document.execCommand('copy');
+                  console.log('Copied using Clipboard API');
+              } catch (clipError) {
+                  console.log('Clipboard API failed:', clipError);
+                  // Fallback to execCommand
+                  const success = document.execCommand('copy');
+                  console.log('execCommand result:', success);
+                  if (!success) {
+                      throw new Error('execCommand failed');
+                  }
               }
               
+              // Cleanup
               document.body.removeChild(textArea);
               showNotification('Copied to clipboard');
+              
           } catch (err) {
               console.error('Copy failed:', err);
-              showNotification('Failed to copy');
+              console.error('Error stack:', err.stack);
+              showNotification(`Failed to copy: ${err.message}`);
           }
       }
 </script>
