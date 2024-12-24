@@ -164,6 +164,253 @@
     </div>
   </div>
   <div id="notification" class="notification"></div>
+
+  <?html>
+  <div id="perfusion-table-container" class="w-full p-2">
+    <style>
+      .perfusion-table {
+        width: 100%;
+        max-width: 900px; /* Limit maximum width */
+        border-collapse: collapse;
+        margin-top: 0.75rem;
+        font-size: 0.75rem; /* Smaller base font size */
+      }
+      .perfusion-table th,
+      .perfusion-table td {
+        border: 1px solid #e5e7eb;
+        padding: 0.25rem 0.375rem; /* Reduced padding */
+        text-align: center;
+      }
+      .perfusion-table th {
+        background-color: #f3f4f6;
+        font-size: 0.75rem; /* Smaller header font */
+        white-space: nowrap; /* Prevent header wrapping */
+      }
+      .perfusion-table td:first-child {
+        font-weight: 500;
+        background-color: #f9fafb;
+        text-align: left;
+        font-size: 0.75rem; /* Smaller disease names */
+      }
+      .toggle-button {
+        background-color: #4cae4c;
+        border: 1px solid #e5e7eb;
+        padding: 0.375rem 0.75rem; /* Smaller button padding */
+        border-radius: 0.375rem;
+        cursor: pointer;
+        font-size: 0.75rem; /* Smaller button text */
+        transition: all 0.2s;
+      }
+      .toggle-button:hover {
+        background-color: #f3f4f6;
+      }
+      .legend {
+        margin-top: 0.75rem;
+        font-size: 0.75rem; /* Smaller legend text */
+      }
+      .legend ul {
+        list-style-type: disc;
+        padding-left: 1.25rem;
+        margin-top: 0.375rem;
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.75rem;
+      }
+      #perfusion-table-container {
+        margin: 0 auto; /* Center the container */
+      }
+    </style>
+
+    <div class="header">
+      <h2 style="font-size: 1rem; font-weight: 600;">Brain Perfusion Changes in Neurodegenerative Diseases</h2>
+      <button id="toggleButton" class="toggle-button">Show Marked Findings Only</button>
+    </div>
+    <div id="tableContainer"></div>
+
+    <script>
+      const data = {
+        all: {
+          diseases: [
+            'Alzheimer\'s Disease (AD)',
+            'Dementia with Lewy Bodies (DLB)',
+            'Frontotemporal Dementia (FTD)', 
+            'Parkinson\'s Disease (PD)',
+            'Vascular Parkinsonism (VP)',
+            'Cortical Cerebellar Atrophy (CCA)',
+            'Multiple System Atrophy-C (MSA-C)',
+            'Amyotrophic Lateral Sclerosis (ALS)'
+          ],
+          regions: [
+            'Frontal Cortex',
+            'Central Sulcus',
+            'Parietal Cortex',
+            'Temporal Cortex', 
+            'Insula',
+            'Occipital Cortex',
+            'Precuneus',
+            'Post. Cingulate', // Shortened name
+            'Cingulate',
+            'Basal Ganglia',
+            'Thalamus',
+            'Cerebellum',
+            'Pons'
+          ],
+          findings: {
+            'Alzheimer\'s Disease (AD)': {
+              'Parietal Cortex': '↓',
+              'Precuneus': '↓↓',
+              'Post. Cingulate': '↓↓'
+            },
+            'Dementia with Lewy Bodies (DLB)': {
+              'Frontal Cortex': '↓',
+              'Parietal Cortex': '↓',
+              'Occipital Cortex': '↓↓',
+              'Precuneus': '↓↓',
+              'Post. Cingulate': '↓',
+              'Cingulate': '↓'
+            },
+            'Frontotemporal Dementia (FTD)': {
+              'Frontal Cortex': '↓*',
+              'Temporal Cortex': '↓',
+              'Insula': '↓'
+            },
+            'Parkinson\'s Disease (PD)': {
+              'Occipital Cortex': '↓',
+              'Precuneus': '↓',
+              'Basal Ganglia': '↑↑',
+              'Thalamus': '↑↑',
+              'Cerebellum': '↑↑'
+            },
+            'Vascular Parkinsonism (VP)': {
+              'Frontal Cortex': '↓',
+              'Parietal Cortex': '↓',
+              'Temporal Cortex': '↓',
+              'Insula': '↓',
+              'Cingulate': '↓↓',
+              'Basal Ganglia': '↓↓',
+              'Thalamus': '↓↓'
+            },
+            'Cortical Cerebellar Atrophy (CCA)': {
+              'Frontal Cortex': '↓?',
+              'Cerebellum': '↓'
+            },
+            'Multiple System Atrophy-C (MSA-C)': {
+              'Frontal Cortex': '↓?',
+              'Cerebellum': '↓↓',
+              'Pons': '↓↓'
+            },
+            'Amyotrophic Lateral Sclerosis (ALS)': {
+              'Frontal Cortex': '↓',
+              'Central Sulcus': '↓↓',
+              'Parietal Cortex': '↓'
+            }
+          }
+        },
+        marked: {
+          diseases: [
+            'Alzheimer\'s Disease (AD)',
+            'Dementia with Lewy Bodies (DLB)',
+            'Vascular Parkinsonism (VP)',
+            'Parkinson\'s Disease (PD)',
+            'Multiple System Atrophy-C (MSA-C)'
+          ],
+          regions: [
+            'Occipital Cortex',
+            'Precuneus',
+            'Post. Cingulate',
+            'Cingulate',
+            'Basal Ganglia',
+            'Thalamus',
+            'Cerebellum',
+            'Pons'
+          ],
+          findings: {
+            'Alzheimer\'s Disease (AD)': {
+              'Precuneus': '↓↓',
+              'Post. Cingulate': '↓↓'
+            },
+            'Dementia with Lewy Bodies (DLB)': {
+              'Occipital Cortex': '↓↓',
+              'Precuneus': '↓↓'
+            },
+            'Vascular Parkinsonism (VP)': {
+              'Cingulate': '↓↓',
+              'Basal Ganglia': '↓↓',
+              'Thalamus': '↓↓'
+            },
+            'Parkinson\'s Disease (PD)': {
+              'Basal Ganglia': '↑↑',
+              'Thalamus': '↑↑',
+              'Cerebellum': '↑↑'
+            },
+            'Multiple System Atrophy-C (MSA-C)': {
+              'Cerebellum': '↓↓',
+              'Pons': '↓↓'
+            }
+          }
+        }
+      };
+
+      function renderTable(showMarkedOnly) {
+        const currentData = showMarkedOnly ? data.marked : data.all;
+        let html = `
+          <div style="max-width: 900px; margin: 0 auto; overflow-x: auto;">
+            <table class="perfusion-table">
+              <thead>
+                <tr>
+                  <th>Disease / Region</th>
+                  ${currentData.regions.map(region => `<th>${region}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody>
+                ${currentData.diseases.map(disease => `
+                  <tr>
+                    <td>${disease}</td>
+                    ${currentData.regions.map(region => `
+                      <td>${currentData.findings[disease]?.[region] || '–'}</td>
+                    `).join('')}
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+          <div class="legend">
+            <p style="font-weight: 500;">Legend:</p>
+            <ul>
+              ${!showMarkedOnly ? `
+                <li>↓: Decreased perfusion</li>
+                <li>↓?: Questionable decrease</li>
+                <li>↓*: Asymmetric decrease</li>
+              ` : ''}
+              <li>↓↓: Markedly decreased perfusion</li>
+              <li>↑↑: Markedly increased perfusion</li>
+              <li>–: No ${showMarkedOnly ? 'marked' : 'significant'} change reported</li>
+            </ul>
+            ${showMarkedOnly ? `
+              <p style="margin-top: 0.5rem; color: #666;">
+                Note: Only marked changes (↓↓ or ↑↑) are shown. Minor changes are omitted for clarity.
+              </p>
+            ` : ''}
+          </div>
+        `;
+        document.getElementById('tableContainer').innerHTML = html;
+      }
+
+      let showMarkedOnly = false;
+      renderTable(showMarkedOnly);
+
+      document.getElementById('toggleButton').addEventListener('click', () => {
+        showMarkedOnly = !showMarkedOnly;
+        document.getElementById('toggleButton').textContent = 
+          showMarkedOnly ? 'Show All Findings' : 'Show Marked Findings Only';
+        renderTable(showMarkedOnly);
+      });
+    </script>
+  </div>
+
   <div style="margin-top: 40px; font-size: 12px;">
     <p><strong>References:</strong></p>
     <ol>
@@ -171,6 +418,7 @@
       <li>Matsuda H. <a href="https://pubmed.ncbi.nlm.nih.gov/17631544/" target="_blank">Role of neuroimaging in Alzheimer's disease, with emphasis on brain perfusion SPECT.</a> J Nucl Med. 2007 Aug;48(8):1289-300. doi: 10.2967/jnumed.106.037218. Epub 2007 Jul 13. PMID: 17631544.</li>
     </ol>
   </div>
+
 
 </body>
 <script>
