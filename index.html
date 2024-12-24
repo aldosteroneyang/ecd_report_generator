@@ -422,6 +422,7 @@
 
 </body>
 <script>
+
   // 確保在頁面加載完成後執行初始化
       document.addEventListener('DOMContentLoaded', function() {
           initLocationMap();  // 初始化位置映射
@@ -490,6 +491,24 @@ const AREAS = [
       }
 
       function createSearchableInput(row) {
+          function findMatches(searchTerm, locations) {
+            // Split search term into individual words and filter out empty strings
+            const searchWords = searchTerm.toLowerCase()
+              .split(' ')
+              .filter(word => word.length > 0);
+
+            // If no search words, return empty array
+            if (searchWords.length === 0) {
+              return locations;
+            }
+
+            // Filter locations that contain all search words
+            return locations.filter(location => {
+              const locationLower = location.toLowerCase();
+              // Check if all search words are contained in the location string
+              return searchWords.every(word => locationLower.includes(word));
+            });
+          }
           const container = document.createElement('div');
           container.className = 'search-container';
 
@@ -510,34 +529,31 @@ const AREAS = [
           };
 
           input.addEventListener('input', () => {
-              const searchTerm = input.value.toLowerCase();
-              const matches = LOCATIONS.filter(loc => {
-                  const currentSeverity = locationStatusMap.get(loc);
-                  return loc.toLowerCase().includes(searchTerm) && !currentSeverity;
-              });
+            const searchTerm = input.value.toLowerCase();
+            const matches = findMatches(searchTerm, LOCATIONS).filter(loc => {
+              const currentSeverity = locationStatusMap.get(loc);
+              return !currentSeverity; // Only show locations that haven't been selected
+            });
 
-              dropdown.innerHTML = '';
-              matches.forEach(match => {
-                  const item = document.createElement('div');
-                  item.className = 'dropdown-item';
-                  // 显示转换后的文本
-                  item.textContent = formatDisplayLocation(match);
-                  item.addEventListener('click', () => {
-                      // 显示转换后的文本，但存储原始值
-                      input.value = formatDisplayLocation(match);
-                      dropdown.style.display = 'none';
-                      
-                      const select = row.querySelector('select');
-                      select.value = 'moderate';
-                      // 存储原始值
-                      locationStatusMap.set(match, 'moderate');
-                      
-                      checkAndAddNewRow();
-                  });
-                  dropdown.appendChild(item);
+            dropdown.innerHTML = '';
+            matches.forEach(match => {
+              const item = document.createElement('div');
+              item.className = 'dropdown-item';
+              item.textContent = formatDisplayLocation(match);
+              item.addEventListener('click', () => {
+                input.value = formatDisplayLocation(match);
+                dropdown.style.display = 'none';
+                
+                const select = row.querySelector('select');
+                select.value = 'moderate';
+                locationStatusMap.set(match, 'moderate');
+                
+                checkAndAddNewRow();
               });
+              dropdown.appendChild(item);
+            });
 
-              dropdown.style.display = matches.length ? 'block' : 'none';
+            dropdown.style.display = matches.length ? 'block' : 'none';
           });
 
           input.addEventListener('focus', () => {
