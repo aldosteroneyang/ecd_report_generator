@@ -3,6 +3,9 @@
 
 <head>
   <title>ECD Report Generator</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -154,6 +157,7 @@
       </div>
       <div id="input-grid">
       </div>
+      <div id="atrophy-checkboxes"></div>
     </div>
     <div class="sidebar">
       <button onclick="copyReport('findings')">Copy Findings</button>
@@ -421,6 +425,79 @@
 
 
 </body>
+<script type="text/babel">
+// AtrophyCheckboxes component
+const AtrophyCheckboxes = () => {
+  const [atrophyFindings, setAtrophyFindings] = React.useState({
+    fissures: false,
+    ventricles: false,
+    sulci: false,
+    interhemisphericFissures: false
+  });
+
+  const handleCheckboxChange = (event) => {
+    const { name, checked } = event.target;
+    setAtrophyFindings(prev => ({
+      ...prev,
+      [name]: checked
+    }));
+    
+    window.atrophyFindings = {
+      ...atrophyFindings,
+      [name]: checked
+    };
+  };
+
+  return (
+    <div style={{marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '4px', backgroundColor: '#f5f5f5'}}>
+      <h3 style={{fontSize: '0.875rem', fontWeight: '500', marginBottom: '0.5rem'}}>Atrophy Findings:</h3>
+      <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem'}}>
+        <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+          <input
+            type="checkbox"
+            name="fissures"
+            checked={atrophyFindings.fissures}
+            onChange={handleCheckboxChange}
+          />
+          <span style={{fontSize: '0.875rem'}}>Cerebral Fissures</span>
+        </label>
+        <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+          <input
+            type="checkbox"
+            name="ventricles"
+            checked={atrophyFindings.ventricles}
+            onChange={handleCheckboxChange}
+          />
+          <span style={{fontSize: '0.875rem'}}>Ventricles</span>
+        </label>
+        <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+          <input
+            type="checkbox"
+            name="sulci"
+            checked={atrophyFindings.sulci}
+            onChange={handleCheckboxChange}
+          />
+          <span style={{fontSize: '0.875rem'}}>Cerebral Sulci</span>
+        </label>
+        <label style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+          <input
+            type="checkbox"
+            name="interhemisphericFissures"
+            checked={atrophyFindings.interhemisphericFissures}
+            onChange={handleCheckboxChange}
+          />
+          <span style={{fontSize: '0.875rem'}}>Interhemispheric Fissures</span>
+        </label>
+      </div>
+    </div>
+  );
+};
+
+// Mount the React component
+const container = document.getElementById('atrophy-checkboxes');
+const root = ReactDOM.createRoot(container);
+root.render(<AtrophyCheckboxes />);
+</script>
 <script>
 
   // 確保在頁面加載完成後執行初始化
@@ -430,8 +507,6 @@
       });
       // Constants
       const BILATERAL_ONLY_AREAS = [
-          'cerebral fissures',
-          'ventricles',
           'brain stem'
       ];
 
@@ -808,90 +883,135 @@ const AREAS = [
         return pluralizeRegions(text);
       }
       function generateReports() {
-          // 直接从显示的 rows 获取最新数据
           const data = collectDataFromRows();
-          console.log('Current data from rows:', data);
-          
+          const atrophyFindings = window.atrophyFindings || {
+              fissures: false,
+              ventricles: false,
+              sulci: false,
+              interhemisphericFissures: false
+          };
+
+          function generateAtrophyText() {
+              const findings = [];
+              if (atrophyFindings.fissures) findings.push("cerebral fissures");
+              if (atrophyFindings.ventricles) findings.push("ventricles");
+              if (atrophyFindings.sulci) findings.push("cerebral sulci");
+              if (atrophyFindings.interhemisphericFissures) findings.push("interhemispheric fissures");
+              
+              if (findings.length === 0) return "";
+              if (findings.length === 1) return `Prominent ${findings[0]} are seen.`;
+              if (findings.length === 2) return `Prominent ${findings[0]} and ${findings[1]} are seen.`;
+              const last = findings.pop();
+              return `Prominent ${findings.join(', ')}, and ${last} are seen.`;
+          }
+
           const regAlz = ["posterior cingulate", "posterior parietal", "precuneus"];
           const regDlb = ["occipital"];
-          const regAtr = ["cerebral fissures", "ventricles"];
 
-          const valAtr = data.filter(x => regAtr.includes(x.area));
-          const valDef = data.filter(x => !regAtr.includes(x.area));
-          const valMar = valDef.filter(x => x.severity === 'marked');
-          const valMod = valDef.filter(x => x.severity === 'moderate');
-          const valMil = valDef.filter(x => x.severity === 'mild');
-          const valSli = valDef.filter(x => x.severity === 'slight');
+          const valMar = data.filter(x => x.severity === 'marked');
+          const valMod = data.filter(x => x.severity === 'moderate');
+          const valMil = data.filter(x => x.severity === 'mild');
+          const valSli = data.filter(x => x.severity === 'slight');
+          const atrophyText = generateAtrophyText();
 
           const txtMar = formatRegions(valMar, 'markedly decreased radioactivity');
           const txtMod = formatRegions(valMod, 'decreased radioactivity');
           const txtMil = formatRegions(valMil, 'mildly decreased radioactivity');
           const txtSli = formatRegions(valSli, 'slightly decreased radioactivity');
-          const txtAtr = valAtr.length === 0 ? "" : 
-                      ('\nProminent' + formatRegions(valAtr, "")).replace(" in", "").replace(" regions", "").replace(" region", "");
 
-          let txtFnd = valMar.concat(valMod, valMil, valSli, valAtr).length === 0 ? 
+          let txtFnd = valMar.concat(valMod, valMil, valSli).length === 0 ? 
               'Tc-99m ECD brain perfusion scan with SPECT shows no definite abnormal radioactivity in the brain.' :
-              'Tc-99m ECD brain perfusion scan with SPECT shows ' + [txtMar, txtMod, txtMil, txtSli].filter(x => x !== '').join("; ") + "." + txtAtr;
+              'Tc-99m ECD brain perfusion scan with SPECT shows ' + [txtMar, txtMod, txtMil, txtSli].filter(x => x !== '').join("; ") + ". ";
 
-          let txtImp = valMar.concat(valMod, valMil, valSli, valAtr).length === 0 ?
-              'No definite abnormal cerebral perfusion detected.' :
+          if (atrophyText) {
+              txtFnd = txtFnd + (txtFnd.endsWith('  ') ? '' : txtFnd.endsWith(' ') ? '' : ' ') + atrophyText;
+          }
+
+          let txtImp = valMar.concat(valMod, valMil, valSli).length === 0 ?
+              'No definite abnormal cerebral perfusion is detected.' :
               txtFnd.replace('Tc-99m ECD brain perfusion scan with SPECT shows ', '')
                   .replace('markedly decreased radioactivity', 'marked hypoperfusion')
                   .replace('decreased radioactivity', 'hypoperfusion')
                   .replace('mildly decreased radioactivity', 'mild hypoperfusion')
-                  .replace('slightly decreased radioactivity', 'suspicious hypoperfusion');
+                  .replace('slightly decreased radioactivity', 'suspicious hypoperfusion')
+                  .replace(/\.\s*Prominent.*?are seen\./, '');
 
-          const posAlz = regAlz.filter(x => {
-              return valDef.some(d => d.area === x);
-          });
-          const posDlb = regDlb.filter(x => {
-              return valDef.some(d => d.area === x);
-          });
+          let posAlz = regAlz.filter(x => data.some(d => d.area === x));
+          let posDlb = regDlb.filter(x => data.some(d => d.area === x));
 
           let txtAlz = createHypoperfusionText(posAlz, "has been reported to be commonly observed in patients with Alzheimer's disease.");
           let txtDlb = createHypoperfusionText(posDlb, "is considered a supportive biomarker of dementia with Lewy bodies.");
 
-          const txtAlzCor = posDlb.length > 0 ? 
-              ` ${posAlz.length > 0 ? "However" : "Besides"}, hypoperfusion in the occipital area is usually not observed in Alzheimer's disease. Clinical correlation is recommended.` : "";
-          const txtDlbCor = posAlz.length > 0 ? " Clinical correlation is recommended." : "";
+          let txtAlzCor = posDlb.length > 0 ? 
+              `${posAlz.length > 0 ? "However" : "Besides"}, hypoperfusion in the occipital area is usually not observed in Alzheimer's disease. Clinical correlation is recommended.` : "";
+          let txtDlbCor = posAlz.length > 0 ? "Clinical correlation is recommended." : "";
 
           txtAlz = txtAlz || "There is no apparently decreased perfusion in the parietal association areas, posterior cingulate, precuneus, which are the regions commonly affected in Alzheimer's disease.";
           txtDlb = txtDlb || "There is no definite evidence of occipital hypoperfusion, a supportive biomarker of dementia with Lewy bodies, observed in this patient.";
 
-          let impressions = [];
-          if (txtImp.includes('Prominent')) {
-              impressions.push(txtImp.split('Prominent')[0].trim());
-              impressions.push("Suspect cerebral atrophy.");
-          } else {
-              impressions.push(txtImp);
+          if (txtAlzCor.length > 0) {
+            txtAlz = txtAlz + txtAlzCor
           }
 
-          impressions = impressions.map(x => capitalizeFirstLetter(x)).filter(x => x.length > 3);
-          txtImp = impressions.length > 1 ?
-              impressions.map((f, index) => (index + 1) + ". " + f).join("\n") :
-              impressions.join("");
+          if (txtDlbCor.length > 0) {
+            txtDlb = txtDlb + txtDlbCor
+          }
 
-          txtAlz = impressions.length > 1 ?
-              ([impressions[0].includes("operfusion") ? impressions[0] + " " + txtAlz + txtAlzCor : impressions[0]]
-                  .concat(impressions.slice(1))).map((f, index) => (index + 1) + ". " + f).join("\n") :
-              ([impressions[0].includes("operfusion") ? impressions[0] + " " + txtAlz + txtAlzCor : impressions[0]]
-                  .concat(impressions.slice(1))).join("");
+          function formatText(text) {
+              // 確保第一個字母大寫
+              text = text.charAt(0).toUpperCase() + text.slice(1);
+              
+              // 統一處理所有空格和句點
+              text = text
+                .replace(/\s+/g, ' ')           // 合併多餘空格
+                .replace(/\.+/g, '.')           // 合併多餘句點
+                .replace(/\.\s*\./g, '.')       // 處理連續的句點（即使中間有空格）
+                .replace(/\./g, '. ')           // 在句點後添加單個空格
+                .trim()                         // 移除首尾空格
+                .replace(/\s*\.$/, '.')        // 確保結尾只有一個句點，沒有空格
+                .replace(/\s\s/g, ' ');
+              return text;
+          }
 
-          txtDlb = impressions.length > 1 ?
-              ([impressions[0].includes("operfusion") ? impressions[0] + " " + txtDlb + txtDlbCor : impressions[0]]
-                  .concat(impressions.slice(1))).map((f, index) => (index + 1) + ". " + f).join("\n") :
-              ([impressions[0].includes("operfusion") ? impressions[0] + " " + txtDlb + txtDlbCor : impressions[0]]
-                  .concat(impressions.slice(1))).join("");
+          function formatNumberedText(impressionArray) {
+              if (impressionArray.length === 0) return '';
+              if (impressionArray.length === 1) return formatText(impressionArray[0]);
+              
+              let result = '';
+              for (let i = 0; i < impressionArray.length; i++) {
+                  result += `\n${i + 1}. ${formatText(impressionArray[i])}`;
+              }
+              return result;
+          }
 
-          txtFnd = processReportText(txtFnd);
+          // 組裝 impressions
+          let impressions = [formatText(txtImp)];
+          if (atrophyText) {
+              impressions.push("Suspect cerebral atrophy.");
+          }
+
+          // 生成最終文本
+ 
+
+          // 處理 Alzheimer's impression
+          let alzImpressions = [formatText(txtImp) + "." + formatText(txtAlz)];
+          if (atrophyText) {
+              alzImpressions.push("Suspect cerebral atrophy.");
+          }
+
           
-          // // Process the impression text
-          txtImp = processReportText(txtImp);
 
-          // Also process Alzheimer's and DLB texts
-          txtAlz = processReportText(txtAlz);
-          txtDlb = processReportText(txtDlb);
+          // 處理 DLB impression 也使用相同的邏輯
+          let dlbImpressions = [formatText(txtImp) + "." + formatText(txtDlb)];
+          if (atrophyText) {
+              dlbImpressions.push("Suspect cerebral atrophy.");
+          }
+          
+          // txtImp = formatNumberedImpressions(impressions.map(x => formatText(x)))
+          txtImp = formatNumberedText(impressions).trim()
+          txtAlz = formatNumberedText(alzImpressions).trim()
+          txtDlb = formatNumberedText(dlbImpressions).trim();
+
           return {
               findings: txtFnd,
               impression: txtImp,
