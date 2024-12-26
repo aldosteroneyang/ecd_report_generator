@@ -69,6 +69,10 @@
       position: relative;
     }
 
+    .dropdown-item.selected {
+        background-color: #e6f3ff;
+    }
+
     .search-input,
     select {
       width: 100%;
@@ -567,23 +571,20 @@ const AREAS = [
 
       function createSearchableInput(row) {
           function findMatches(searchTerm, locations) {
-            // Split search term into individual words and filter out empty strings
-            const searchWords = searchTerm.toLowerCase()
-              .split(' ')
-              .filter(word => word.length > 0);
+              const searchWords = searchTerm.toLowerCase()
+                  .split(' ')
+                  .filter(word => word.length > 0);
 
-            // If no search words, return empty array
-            if (searchWords.length === 0) {
-              return locations;
-            }
+              if (searchWords.length === 0) {
+                  return locations;
+              }
 
-            // Filter locations that contain all search words
-            return locations.filter(location => {
-              const locationLower = location.toLowerCase();
-              // Check if all search words are contained in the location string
-              return searchWords.every(word => locationLower.includes(word));
-            });
+              return locations.filter(location => {
+                  const locationLower = location.toLowerCase();
+                  return searchWords.every(word => locationLower.includes(word));
+              });
           }
+
           const container = document.createElement('div');
           container.className = 'search-container';
 
@@ -594,7 +595,9 @@ const AREAS = [
           const dropdown = document.createElement('div');
           dropdown.className = 'dropdown';
 
-          // 添加显示转换函数
+          let selectedIndex = -1;
+          let currentMatches = [];
+
           const formatDisplayLocation = (location) => {
               if (location.includes('basal ganglia') && 
                   (location.startsWith('left ') || location.startsWith('right '))) {
@@ -603,32 +606,89 @@ const AREAS = [
               return location;
           };
 
+          const selectItem = (index) => {
+              const items = dropdown.querySelectorAll('.dropdown-item');
+              items.forEach(item => item.classList.remove('selected'));
+              
+              if (index >= 0 && index < items.length) {
+                  selectedIndex = index;
+                  const selectedItem = items[index];
+                  selectedItem.classList.add('selected');
+                  selectedItem.scrollIntoView({ block: 'nearest' });
+              }
+          };
+
+          input.addEventListener('keydown', (e) => {
+              const items = dropdown.querySelectorAll('.dropdown-item');
+              
+              switch(e.key) {
+                  case 'ArrowDown':
+                      e.preventDefault();
+                      selectItem((selectedIndex + 1) % items.length);
+                      break;
+                  case 'ArrowUp':
+                      e.preventDefault();
+                      selectItem(selectedIndex <= 0 ? items.length - 1 : selectedIndex - 1);
+                      break;
+                  case 'Enter':
+                      e.preventDefault();
+                      if (selectedIndex >= 0 && selectedIndex < items.length) {
+                          const selectedItem = items[selectedIndex];
+                          input.value = selectedItem.textContent;
+                          dropdown.style.display = 'none';
+                          
+                          const select = row.querySelector('select');
+                          select.value = 'moderate';
+                          locationStatusMap.set(currentMatches[selectedIndex], 'moderate');
+                          
+                          setTimeout(() => {
+                              checkAndAddNewRow(true);
+                          }, 0);
+                      }
+                      break;
+                  case 'Escape':
+                      dropdown.style.display = 'none';
+                      input.blur();
+                      break;
+              }
+          });
+
           input.addEventListener('input', () => {
-            const searchTerm = input.value.toLowerCase();
-            const matches = findMatches(searchTerm, LOCATIONS).filter(loc => {
-              const currentSeverity = locationStatusMap.get(loc);
-              return !currentSeverity; // Only show locations that haven't been selected
-            });
-
-            dropdown.innerHTML = '';
-            matches.forEach(match => {
-              const item = document.createElement('div');
-              item.className = 'dropdown-item';
-              item.textContent = formatDisplayLocation(match);
-              item.addEventListener('click', () => {
-                input.value = formatDisplayLocation(match);
-                dropdown.style.display = 'none';
-                
-                const select = row.querySelector('select');
-                select.value = 'moderate';
-                locationStatusMap.set(match, 'moderate');
-                
-                checkAndAddNewRow();
+              const searchTerm = input.value.toLowerCase();
+              currentMatches = findMatches(searchTerm, LOCATIONS).filter(loc => {
+                  const currentSeverity = locationStatusMap.get(loc);
+                  return !currentSeverity;
               });
-              dropdown.appendChild(item);
-            });
 
-            dropdown.style.display = matches.length ? 'block' : 'none';
+              dropdown.innerHTML = '';
+              selectedIndex = -1;
+
+              currentMatches.forEach((match, index) => {
+                  const item = document.createElement('div');
+                  item.className = 'dropdown-item';
+                  item.textContent = formatDisplayLocation(match);
+                  
+                  item.addEventListener('click', () => {
+                      input.value = formatDisplayLocation(match);
+                      dropdown.style.display = 'none';
+                      
+                      const select = row.querySelector('select');
+                      select.value = 'moderate';
+                      locationStatusMap.set(match, 'moderate');
+                      
+                      setTimeout(() => {
+                          checkAndAddNewRow(true);
+                      }, 0);
+                  });
+
+                  item.addEventListener('mouseover', () => {
+                      selectItem(index);
+                  });
+
+                  dropdown.appendChild(item);
+              });
+
+              dropdown.style.display = currentMatches.length ? 'block' : 'none';
           });
 
           input.addEventListener('focus', () => {
@@ -708,13 +768,19 @@ const AREAS = [
           return row;
       }
 
-      function checkAndAddNewRow() {
+      function checkAndAddNewRow(shouldFocus = false) {
           const rows = document.querySelectorAll('.input-row');
           const lastRow = rows[rows.length - 1];
           
           if (!lastRow) {
               const newRow = createRow();
               document.getElementById('input-grid').appendChild(newRow);
+              if (shouldFocus) {
+                  setTimeout(() => {
+                      const input = newRow.querySelector('.search-input');
+                      input.focus();
+                  }, 0);
+              }
               return;
           }
 
@@ -725,6 +791,12 @@ const AREAS = [
               locationStatusMap.set(input.value, select.value);
               const newRow = createRow();
               document.getElementById('input-grid').appendChild(newRow);
+              if (shouldFocus) {
+                  setTimeout(() => {
+                      const input = newRow.querySelector('.search-input');
+                      input.focus();
+                  }, 0);
+              }
           }
       }
 
