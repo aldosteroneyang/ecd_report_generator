@@ -430,6 +430,69 @@
 
 </body>
 <script type="text/babel">
+// CerebellarDiaschisisCheckbox component
+const CerebellarDiaschisisCheckbox = () => {
+  const [isEnabled, setIsEnabled] = React.useState(false);
+  const [isChecked, setIsChecked] = React.useState(false);
+
+  React.useEffect(() => {
+    // Function to check if cerebellar locations are selected
+    const checkCerebellarLocations = () => {
+      const cerebellarLocations = ['left cerebellar', 'right cerebellar', 'bilateral cerebellar'];
+      let hasValidLocation = false;
+      
+      for (const [location, severity] of locationStatusMap) {
+        if (cerebellarLocations.some(cl => location.includes(cl)) && severity) {
+          hasValidLocation = true;
+          break;
+        }
+      }
+      
+      setIsEnabled(hasValidLocation);
+      if (!hasValidLocation) {
+        setIsChecked(false);
+      }
+    };
+
+    // Initial check
+    checkCerebellarLocations();
+
+    // Add observer for locationStatusMap changes
+    const observer = new MutationObserver(checkCerebellarLocations);
+    observer.observe(document.getElementById('input-grid'), { 
+      childList: true, 
+      subtree: true 
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  const handleChange = (event) => {
+    setIsChecked(event.target.checked);
+    window.cerebellarDiaschisis = event.target.checked;
+  };
+
+  return (
+    <div style={{marginTop: '0.5rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '4px', backgroundColor: '#f5f5f5'}}>
+      <label style={{
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: '0.5rem',
+        opacity: isEnabled ? 1 : 0.5,
+        cursor: isEnabled ? 'pointer' : 'not-allowed'
+      }}>
+        <input
+          type="checkbox"
+          checked={isChecked}
+          onChange={handleChange}
+          disabled={!isEnabled}
+        />
+        <span style={{fontSize: '0.875rem'}}>Cerebellar Diaschisis</span>
+      </label>
+    </div>
+  );
+};
+
 // AtrophyCheckboxes component
 const AtrophyCheckboxes = () => {
   const [atrophyFindings, setAtrophyFindings] = React.useState({
@@ -500,7 +563,12 @@ const AtrophyCheckboxes = () => {
 // Mount the React component
 const container = document.getElementById('atrophy-checkboxes');
 const root = ReactDOM.createRoot(container);
-root.render(<AtrophyCheckboxes />);
+root.render(
+  <>
+    <AtrophyCheckboxes />
+    <CerebellarDiaschisisCheckbox />
+  </>
+);
 </script>
 <script>
 
@@ -536,7 +604,10 @@ const AREAS = [
           'precuneus',
           'basal ganglia',
           'thalamus',
-          'insular'
+          'insular',
+
+          // 小腦
+          'cerebellar',
       ];
 
 
@@ -954,6 +1025,7 @@ const AREAS = [
         // Process text with pluralization
         return pluralizeRegions(text);
       }
+      
       function generateReports() {
           const data = collectDataFromRows();
           const atrophyFindings = window.atrophyFindings || {
@@ -977,6 +1049,57 @@ const AREAS = [
               return `Prominent ${findings.join(', ')}, and ${last} are seen.`;
           }
 
+          function formatCerebellarDiaschisisText(data, severity) {
+              const cerebellarRegions = [];
+              data.forEach(item => {
+                  if (item.area.includes('cerebellar')) {
+                      cerebellarRegions.push(item.fullLocation);
+                  }
+              });
+              
+              if (cerebellarRegions.length === 0) return '';
+              
+              let severityText = '';
+              switch(severity) {
+                  case 'marked':
+                  case 'moderate':
+                      severityText = 'suspect cross cerebellar diaschisis';
+                      break;
+                  case 'mild':
+                      severityText = 'possible cross cerebellar diaschisis';
+                      break;
+                  case 'slight':
+                      severityText = 'cross cerebellar diaschisis cannot be excluded completely';
+                      break;
+              }
+              
+              return `Hypoperfusion in the ${cerebellarRegions.join(' and ')} region${cerebellarRegions.length > 1 ? 's' : ''}, ${severityText}`;
+          }
+
+          function formatText(text) {
+              text = text.charAt(0).toUpperCase() + text.slice(1);
+              return text
+                  .replace(/\s+/g, ' ')
+                  .replace(/\.+/g, '.')
+                  .replace(/\.\s*\./g, '.')
+                  .replace(/\./g, '. ')
+                  .trim()
+                  .replace(/\s*\.$/, '.')
+                  .replace(/\s\s/g, ' ');
+          }
+
+          function formatNumberedText(impressionArray) {
+              if (impressionArray.length === 0) return '';
+              if (impressionArray.length === 1) return formatText(impressionArray[0]);
+              
+              let result = '';
+              for (let i = 0; i < impressionArray.length; i++) {
+                  result += `\n${i + 1}. ${formatText(impressionArray[i])}`;
+              }
+              return result;
+          }
+
+          // Generate findings text
           const regAlz = ["posterior cingulate", "posterior parietal", "precuneus"];
           const regDlb = ["occipital"];
 
@@ -999,15 +1122,61 @@ const AREAS = [
               txtFnd = txtFnd + (txtFnd.endsWith('  ') ? '' : txtFnd.endsWith(' ') ? '' : ' ') + atrophyText;
           }
 
-          let txtImp = valMar.concat(valMod, valMil, valSli).length === 0 ?
-              'No definite abnormal cerebral perfusion is detected.' :
-              txtFnd.replace('Tc-99m ECD brain perfusion scan with SPECT shows ', '')
-                  .replace('markedly decreased radioactivity', 'marked hypoperfusion')
-                  .replace('decreased radioactivity', 'hypoperfusion')
-                  .replace('mildly decreased radioactivity', 'mild hypoperfusion')
-                  .replace('slightly decreased radioactivity', 'suspicious hypoperfusion')
-                  .replace(/\.\s*Prominent.*?are seen\./, '');
+          // Generate impression text
+          let baseImpressions = [];
 
+          if (window.cerebellarDiaschisis) {
+              const nonCerebellarData = data.filter(item => !item.area.includes('cerebellar'));
+              const cerebellarData = data.filter(item => item.area.includes('cerebellar'));
+
+              // Generate main impression text without cerebellar regions
+              const valMarNonCereb = nonCerebellarData.filter(x => x.severity === 'marked');
+              const valModNonCereb = nonCerebellarData.filter(x => x.severity === 'moderate');
+              const valMilNonCereb = nonCerebellarData.filter(x => x.severity === 'mild');
+              const valSliNonCereb = nonCerebellarData.filter(x => x.severity === 'slight');
+
+              const txtMarNonCereb = formatRegions(valMarNonCereb, 'marked hypoperfusion');
+              const txtModNonCereb = formatRegions(valModNonCereb, 'hypoperfusion');
+              const txtMilNonCereb = formatRegions(valMilNonCereb, 'mild hypoperfusion');
+              const txtSliNonCereb = formatRegions(valSliNonCereb, 'suspicious hypoperfusion');
+
+              let mainText = [txtMarNonCereb, txtModNonCereb, txtMilNonCereb, txtSliNonCereb]
+                  .filter(x => x !== '')
+                  .join('; ');
+
+              if (nonCerebellarData.length > 0) {
+                  baseImpressions.push(mainText + '.');
+              }
+
+              if (cerebellarData.length > 0) {
+                  const maxSeverity = cerebellarData.reduce((max, item) => {
+                      const severityOrder = { marked: 4, moderate: 3, mild: 2, slight: 1 };
+                      return severityOrder[item.severity] > severityOrder[max] ? item.severity : max;
+                  }, 'slight');
+
+                  const diaschisisText = formatCerebellarDiaschisisText(cerebellarData, maxSeverity);
+                  if (diaschisisText) {
+                      baseImpressions.push(diaschisisText + '.');
+                  }
+              }
+          } else {
+              const mainImp = valMar.concat(valMod, valMil, valSli).length === 0 ?
+                  'No definite abnormal cerebral perfusion is detected.' :
+                  txtFnd.replace('Tc-99m ECD brain perfusion scan with SPECT shows ', '')
+                      .replace('markedly decreased radioactivity', 'marked hypoperfusion')
+                      .replace('decreased radioactivity', 'hypoperfusion')
+                      .replace('mildly decreased radioactivity', 'mild hypoperfusion')
+                      .replace('slightly decreased radioactivity', 'suspicious hypoperfusion')
+                      .replace(/\.\s*Prominent.*?are seen\./, '');
+              
+              baseImpressions.push(mainImp);
+          }
+
+          if (baseImpressions.length === 0) {
+              baseImpressions.push('No definite abnormal cerebral perfusion is detected.');
+          }
+
+          // Generate ALZ and DLB specific texts
           let posAlz = regAlz.filter(x => data.some(d => d.area === x));
           let posDlb = regDlb.filter(x => data.some(d => d.area === x));
 
@@ -1021,76 +1190,44 @@ const AREAS = [
           txtAlz = txtAlz || "There is no apparently decreased perfusion in the parietal association areas, posterior cingulate, precuneus, which are the regions commonly affected in Alzheimer's disease.";
           txtDlb = txtDlb || "There is no definite evidence of occipital hypoperfusion, a supportive biomarker of dementia with Lewy bodies, observed in this patient.";
 
-          if (txtAlzCor.length > 0) {
-            txtAlz = txtAlz + txtAlzCor
-          }
+          if (txtAlzCor.length > 0) txtAlz = txtAlz + txtAlzCor;
+          if (txtDlbCor.length > 0) txtDlb = txtDlb + txtDlbCor;
 
-          if (txtDlbCor.length > 0) {
-            txtDlb = txtDlb + txtDlbCor
-          }
-
-          function formatText(text) {
-              // 確保第一個字母大寫
-              text = text.charAt(0).toUpperCase() + text.slice(1);
-              
-              // 統一處理所有空格和句點
-              text = text
-                .replace(/\s+/g, ' ')           // 合併多餘空格
-                .replace(/\.+/g, '.')           // 合併多餘句點
-                .replace(/\.\s*\./g, '.')       // 處理連續的句點（即使中間有空格）
-                .replace(/\./g, '. ')           // 在句點後添加單個空格
-                .trim()                         // 移除首尾空格
-                .replace(/\s*\.$/, '.')        // 確保結尾只有一個句點，沒有空格
-                .replace(/\s\s/g, ' ');
-              return text;
-          }
-
-          function formatNumberedText(impressionArray) {
-              if (impressionArray.length === 0) return '';
-              if (impressionArray.length === 1) return formatText(impressionArray[0]);
-              
-              let result = '';
-              for (let i = 0; i < impressionArray.length; i++) {
-                  result += `\n${i + 1}. ${formatText(impressionArray[i])}`;
+          // Create final impressions arrays
+          let impressions = [...baseImpressions];
+          
+          // For ALZ and DLB impressions, only add the supportive text to non-cerebellar findings
+          let alzImpressions = baseImpressions.map(imp => {
+              // If this is a cerebellar diaschisis impression, don't add ALZ text
+              if (imp.includes('cerebellar diaschisis')) {
+                  return imp;
               }
-              return result;
-          }
+              return imp + (imp.endsWith('.') ? '' : '.') + txtAlz;
+          });
+          
+          let dlbImpressions = baseImpressions.map(imp => {
+              // If this is a cerebellar diaschisis impression, don't add DLB text
+              if (imp.includes('cerebellar diaschisis')) {
+                  return imp;
+              }
+              return imp + (imp.endsWith('.') ? '' : '.') + txtDlb;
+          });
 
-          // 組裝 impressions
-          let impressions = [formatText(txtImp)];
+          // Add atrophy finding if present
           if (atrophyText) {
               impressions.push("Suspect cerebral atrophy.");
-          }
-
-          // 生成最終文本
- 
-
-          // 處理 Alzheimer's impression
-          let alzImpressions = [formatText(txtImp) + "." + formatText(txtAlz)];
-          if (atrophyText) {
               alzImpressions.push("Suspect cerebral atrophy.");
-          }
-
-          
-
-          // 處理 DLB impression 也使用相同的邏輯
-          let dlbImpressions = [formatText(txtImp) + "." + formatText(txtDlb)];
-          if (atrophyText) {
               dlbImpressions.push("Suspect cerebral atrophy.");
           }
-          
-          // txtImp = formatNumberedImpressions(impressions.map(x => formatText(x)))
-          txtImp = formatNumberedText(impressions).trim()
-          txtAlz = formatNumberedText(alzImpressions).trim()
-          txtDlb = formatNumberedText(dlbImpressions).trim();
 
           return {
               findings: txtFnd,
-              impression: txtImp,
-              alz: txtAlz,
-              dlb: txtDlb
+              impression: formatNumberedText(impressions),
+              alz: formatNumberedText(alzImpressions),
+              dlb: formatNumberedText(dlbImpressions)
           };
       }
+
 
       function clearTable() {
           const grid = document.getElementById('input-grid');
