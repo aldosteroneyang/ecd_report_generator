@@ -6,6 +6,9 @@
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Handsontable CSS & JS -->
+  <link href="https://cdn.jsdelivr.net/npm/handsontable@13.1.0/dist/handsontable.full.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/handsontable@13.1.0/dist/handsontable.full.min.js"></script>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -159,8 +162,8 @@
         <div>Location</div>
         <div>Severity</div>
       </div>
-      <div id="input-grid">
-      </div>
+      <div id="hot-container" style="height: 300px; overflow: hidden; margin-bottom: 20px;"></div>
+      <div id="input-grid" style="display: none;"></div>
       <div id="atrophy-checkboxes"></div>
     </div>
     <div class="sidebar">
@@ -442,7 +445,7 @@ const CerebellarDiaschisisCheckbox = () => {
       let hasValidLocation = false;
       
       for (const [location, severity] of locationStatusMap) {
-        if (cerebellarLocations.some(cl => location.includes(cl)) && severity) {
+        if (cerebellarLocations.some(cl => location.includes(cl)) && severity && severity !== '') {
           hasValidLocation = true;
           break;
         }
@@ -457,14 +460,16 @@ const CerebellarDiaschisisCheckbox = () => {
     // Initial check
     checkCerebellarLocations();
 
-    // Add observer for locationStatusMap changes
-    const observer = new MutationObserver(checkCerebellarLocations);
-    observer.observe(document.getElementById('input-grid'), { 
-      childList: true, 
-      subtree: true 
-    });
+    // 監聽自定義事件，而不是使用 MutationObserver
+    const handleLocationChange = () => {
+      checkCerebellarLocations();
+    };
+    
+    document.addEventListener('locationStatusMapChanged', handleLocationChange);
 
-    return () => observer.disconnect();
+    return () => {
+      document.removeEventListener('locationStatusMapChanged', handleLocationChange);
+    };
   }, []);
 
   const handleChange = (event) => {
@@ -571,729 +576,1154 @@ root.render(
 );
 </script>
 <script>
-
   // 確保在頁面加載完成後執行初始化
-      document.addEventListener('DOMContentLoaded', function() {
-          initLocationMap();  // 初始化位置映射
-          checkAndAddNewRow();  // 添加第一個輸入行
-      });
-      // Constants
-      const BILATERAL_ONLY_AREAS = [
-          'brain stem'
-      ];
+  document.addEventListener('DOMContentLoaded', function() {
+      initLocationMap();  // 初始化位置映射
+      initHandsontable();  // 初始化 Handsontable
+  });
+  
+  // Constants
+  const BILATERAL_ONLY_AREAS = [
+      'brain stem'
+  ];
 
 const AREAS = [
-          // 主要大腦葉區域
-          'frontal', 'parietal', 'temporal', 'occipital',
-          
-          // 複合區域
-          'fronto-parietal', 'parieto-temporal', 'temporo-occipital',
-          
-          // 前部區域
-          'anterior frontal', 'anterior fronto-parietal', 'anterior parietal', 'anterior temporal',
-          
-          // 後部區域
-          'posterior fronto-parietal', 'posterior parietal', 'posterior temporal',
-          
-          // 特定功能區域
-          'inferior frontal',
-          
-          // 內側和深部結構
-          'cingulate', 'anterior cingulate', 'posterior cingulate',
-          'medial temporal', 'mesial temporal',
-          'precuneus',
-          'basal ganglia',
-          'thalamus',
-          'insular',
-
-          // 小腦
-          'cerebellar',
-      ];
-
-
-      const SEVERITIES = ['', 'moderate', 'slight', 'mild', 'marked'];
-      const SIDES = ['left', 'right', 'bilateral'];
-
-      // Generate all possible combinations
-      const LOCATIONS = [];
+      // 主要大腦葉區域
+      'frontal', 'parietal', 'temporal', 'occipital',
       
-      // Add bilateral-only areas
-      BILATERAL_ONLY_AREAS.forEach(area => {
-          LOCATIONS.push(area);
+      // 複合區域
+      'fronto-parietal', 'parieto-temporal', 'temporo-occipital',
+      
+      // 前部區域
+      'anterior frontal', 'anterior fronto-parietal', 'anterior parietal', 'anterior temporal',
+      
+      // 後部區域
+      'posterior fronto-parietal', 'posterior parietal', 'posterior temporal',
+      
+      // 特定功能區域
+      'inferior frontal',
+      
+      // 內側和深部結構
+      'cingulate', 'anterior cingulate', 'posterior cingulate',
+      'medial temporal', 'mesial temporal',
+      'precuneus',
+      'basal ganglia',
+      'thalamus',
+      'insular',
+
+      // 小腦
+      'cerebellar',
+  ];
+
+
+  const SEVERITIES = ['', 'moderate', 'slight', 'mild', 'marked'];
+  const SIDES = ['left', 'right', 'bilateral'];
+
+  // Generate all possible combinations
+  const LOCATIONS = [];
+  
+  // Add bilateral-only areas
+  BILATERAL_ONLY_AREAS.forEach(area => {
+      LOCATIONS.push(area);
+  });
+
+  // Add areas that need sides
+  AREAS.forEach(area => {
+      SIDES.forEach(side => {
+          LOCATIONS.push(`${side} ${area}`);
       });
+  });
 
-      // Add areas that need sides
-      AREAS.forEach(area => {
-          SIDES.forEach(side => {
-              LOCATIONS.push(`${side} ${area}`);
-          });
-      });
-
-      // State management
-      let locationStatusMap = new Map();
-
-      // Initialize location map
-      function initLocationMap() {
-          locationStatusMap.clear();
-          LOCATIONS.forEach(location => {
-              locationStatusMap.set(location, '');
-          });
-      }
-
-      function createSearchableInput(row) {
-          function findMatches(searchTerm, locations) {
-              const searchWords = searchTerm.toLowerCase()
-                  .split(' ')
-                  .filter(word => word.length > 0);
-
-              if (searchWords.length === 0) {
-                  return locations;
-              }
-
-              return locations.filter(location => {
-                  const locationLower = location.toLowerCase();
-                  return searchWords.every(word => locationLower.includes(word));
-              });
+  // Handsontable 實例
+  let hot;
+  
+  // 初始化 Handsontable
+  function initHandsontable() {
+      const container = document.getElementById('hot-container');
+      
+      // 初始數據 - 一個空行
+      const data = [['', '']];
+      
+      // 位置選擇器自定義渲染器
+      const locationRenderer = function(instance, td, row, col, prop, value, cellProperties) {
+          Handsontable.renderers.TextRenderer.apply(this, arguments);
+          
+          // 如果值是從有效地點列表中選擇的，改變背景顏色
+          if (value && LOCATIONS.includes(value)) {
+              td.style.background = '#f0f8ff'; // 淺藍色背景
           }
-
-          const container = document.createElement('div');
-          container.className = 'search-container';
-
-          const input = document.createElement('input');
-          input.className = 'search-input';
-          input.placeholder = 'Type to search...';
-
-          const dropdown = document.createElement('div');
-          dropdown.className = 'dropdown';
-
-          let selectedIndex = -1;
-          let currentMatches = [];
-
-          const formatDisplayLocation = (location) => {
+          
+          return td;
+      };
+      
+      // 創建自訂編輯器
+      class CustomAutocompleteEditor extends Handsontable.editors.TextEditor {
+          constructor(hotInstance) {
+              super(hotInstance);
+          }
+          
+          prepare(row, col, prop, td, originalValue, cellProperties) {
+              super.prepare(row, col, prop, td, originalValue, cellProperties);
+              
+              // 建立下拉選單元素
+              if (!this.dropdown) {
+                  this.dropdown = document.createElement('div');
+                  this.dropdown.className = 'custom-autocomplete-dropdown';
+                  this.dropdown.style.position = 'absolute';
+                  this.dropdown.style.backgroundColor = 'white';
+                  this.dropdown.style.border = '1px solid #ccc';
+                  this.dropdown.style.maxHeight = '200px';
+                  this.dropdown.style.overflow = 'auto';
+                  this.dropdown.style.zIndex = 1000;
+                  this.dropdown.style.display = 'none';
+                  this.dropdown.style.width = '100%';
+                  document.body.appendChild(this.dropdown);
+                  
+                  // 防止點擊下拉選單關閉編輯器
+                  this.dropdown.addEventListener('mousedown', (e) => {
+                      e.stopPropagation();
+                  });
+              }
+          }
+          
+          open() {
+              super.open();
+              this.showDropdown();
+              
+              // 移除可能存在的全局事件監聽器
+              if (this.globalMousedownListener) {
+                  document.removeEventListener('mousedown', this.globalMousedownListener);
+              }
+              
+              // 監聽輸入事件
+              if (!this.inputListenerAdded) {
+                  this.TEXTAREA.addEventListener('input', () => {
+                      this.showDropdown();
+                  });
+                  
+                  // 處理按鍵事件
+                  this.TEXTAREA.addEventListener('keydown', (e) => {
+                      // 如果下拉選單不可見或沒有選項，讓方向鍵事件傳遞給 Handsontable
+                      if (this.dropdown.style.display === 'none' || !this.items || this.items.length === 0) {
+                          if (e.key !== 'Enter' && e.key !== 'Escape') {
+                              return;
+                          }
+                      }
+                      
+                      if (e.key === 'ArrowDown') {
+                          e.preventDefault();
+                          e.stopPropagation(); // 阻止事件傳播到 Handsontable
+                          this.selectNextItem();
+                      } else if (e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          e.stopPropagation(); // 阻止事件傳播到 Handsontable
+                          this.selectPrevItem();
+                      } else if (e.key === 'Enter') {
+                          if (this.selectedItem) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              this.selectCurrentItem();
+                              this.finishEditing();
+                          }
+                      } else if (e.key === 'Escape') {
+                          this.hideDropdown();
+                      } else if (e.key === 'Tab') {
+                          // 允許 Tab 鍵正常工作
+                          this.hideDropdown();
+                      }
+                  });
+                  
+                  this.inputListenerAdded = true;
+              }
+              
+              // 添加全局滑鼠點擊事件，防止點擊下拉列表外部關閉編輯器
+              this.globalMousedownListener = (e) => {
+                  if (this.dropdown.style.display === 'block' && 
+                      !this.dropdown.contains(e.target) && 
+                      !this.TEXTAREA.contains(e.target)) {
+                      // 點擊在下拉列表和輸入框外部
+                      this.hideDropdown();
+                  }
+              };
+              document.addEventListener('mousedown', this.globalMousedownListener);
+          }
+          
+          close() {
+              // 移除全局事件監聽器
+              if (this.globalMousedownListener) {
+                  document.removeEventListener('mousedown', this.globalMousedownListener);
+                  this.globalMousedownListener = null;
+              }
+              
+              this.hideDropdown();
+              super.close();
+          }
+          
+          finishEditing() {
+              if (this.selectedItem) {
+                  // 先保存選擇的值
+                  const value = this.selectedItem;
+                  
+                  // 清除狀態
+                  this.hideDropdown();
+                  
+                  // 設置值並結束編輯
+                  this.TEXTAREA.value = value;
+                  
+                  // 通過 setTimeout 防止事件衝突
+                  setTimeout(() => {
+                      try {
+                          super.finishEditing();
+                          
+                          // 在編輯完成後，設置默認的嚴重程度
+                          const row = this.hot.getSelectedRange().from.row;
+                          
+                          // 檢查當前行的嚴重程度是否為空
+                          const currentSeverity = this.hot.getDataAtCell(row, 1);
+                          if (!currentSeverity) {
+                              // 設置默認嚴重程度為 'moderate'
+                              this.hot.setDataAtCell(row, 1, 'moderate');
+                          }
+                          
+                          // 如果這是最後一行，確保添加新行
+                          if (row === this.hot.countRows() - 1) {
+                              syncTableWithMap();
+                          }
+                      } catch (e) {
+                          console.error('Error in finishEditing:', e);
+                      }
+                  }, 10);
+              } else {
+                  super.finishEditing();
+              }
+          }
+          
+          showDropdown() {
+              const query = this.TEXTAREA.value.toLowerCase();
+              
+              // 使用原版的 fuzzy search 邏輯
+              const searchWords = query.split(' ').filter(word => word.length > 0);
+              let matches = LOCATIONS;
+              
+              if (searchWords.length > 0) {
+                  matches = LOCATIONS.filter(location => {
+                      const locationLower = location.toLowerCase();
+                      return searchWords.every(word => locationLower.includes(word));
+                  });
+              }
+              
+              // 只過濾具有有效嚴重程度值的位置
+              matches = matches.filter(location => {
+                  // 排除已有嚴重程度的位置，但要確保嚴重程度不是空字串
+                  const severity = locationStatusMap.get(location);
+                  return !severity || severity === ''; // 如果沒有值或值為空字串，則保留
+              });
+              
+              if (matches.length === 0) {
+                  this.hideDropdown();
+                  return;
+              }
+              
+              // 更新下拉選單內容
+              this.dropdown.innerHTML = '';
+              this.items = matches;
+              this.selectedItemIndex = -1;
+              this.selectedItem = null;
+              
+              matches.forEach((match, index) => {
+                  const item = document.createElement('div');
+                  item.className = 'custom-autocomplete-item';
+                  item.textContent = this.formatDisplayLocation(match);
+                  item.style.padding = '8px 10px';
+                  item.style.cursor = 'pointer';
+                  item.style.borderBottom = '1px solid #f0f0f0';
+                  item.style.transition = 'background-color 0.15s ease';
+                  
+                  item.addEventListener('mouseover', () => {
+                      this.selectItem(index);
+                  });
+                  
+                  item.addEventListener('click', () => {
+                      this.TEXTAREA.value = match;
+                      this.selectedItem = match;
+                      
+                      // 立即設置默認嚴重程度為 'moderate'
+                      // 在 finishEditing 之前記錄當前行
+                      this.selectedRow = this.hot.getSelectedRange().from.row;
+                      
+                      this.finishEditing();
+                  });
+                  
+                  this.dropdown.appendChild(item);
+              });
+              
+              // 計算並設置下拉選單位置
+              const rect = this.TEXTAREA.getBoundingClientRect();
+              this.dropdown.style.top = (rect.bottom + window.scrollY) + 'px';
+              this.dropdown.style.left = (rect.left + window.scrollX) + 'px';
+              this.dropdown.style.width = rect.width + 'px';
+              this.dropdown.style.maxHeight = '200px';
+              this.dropdown.style.overflowY = 'auto';
+              this.dropdown.style.backgroundColor = 'white';
+              this.dropdown.style.border = '1px solid #ddd';
+              this.dropdown.style.borderRadius = '4px';
+              this.dropdown.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+              this.dropdown.style.zIndex = '2000';
+              this.dropdown.style.display = 'block';
+          }
+          
+          formatDisplayLocation(location) {
               if (location.includes('basal ganglia') && 
                   (location.startsWith('left ') || location.startsWith('right '))) {
                   return location.replace('basal ganglia', 'basal ganglion');
               }
               return location;
-          };
-
-          const selectItem = (index) => {
-              const items = dropdown.querySelectorAll('.dropdown-item');
-              items.forEach(item => item.classList.remove('selected'));
+          }
+          
+          selectItem(index) {
+              const items = this.dropdown.querySelectorAll('.custom-autocomplete-item');
+              items.forEach(item => {
+                  item.style.backgroundColor = '';
+                  item.style.color = '';
+              });
               
               if (index >= 0 && index < items.length) {
-                  selectedIndex = index;
-                  const selectedItem = items[index];
-                  selectedItem.classList.add('selected');
-                  selectedItem.scrollIntoView({ block: 'nearest' });
+                  this.selectedItemIndex = index;
+                  this.selectedItem = this.items[index];
+                  items[index].style.backgroundColor = '#e6f3ff';
+                  items[index].style.color = '#1890ff';
+                  items[index].style.fontWeight = '500';
               }
-          };
-
-          input.addEventListener('keydown', (e) => {
-              const items = dropdown.querySelectorAll('.dropdown-item');
+          }
+          
+          selectNextItem() {
+              if (!this.items || this.items.length === 0) {
+                  return;
+              }
               
-              switch(e.key) {
-                  case 'ArrowDown':
-                      e.preventDefault();
-                      selectItem((selectedIndex + 1) % items.length);
-                      break;
-                  case 'ArrowUp':
-                      e.preventDefault();
-                      selectItem(selectedIndex <= 0 ? items.length - 1 : selectedIndex - 1);
-                      break;
-                  case 'Enter':
-                      e.preventDefault();
-                      if (selectedIndex >= 0 && selectedIndex < items.length) {
-                          const selectedItem = items[selectedIndex];
-                          input.value = selectedItem.textContent;
-                          dropdown.style.display = 'none';
-                          
-                          const select = row.querySelector('select');
-                          select.value = 'moderate';
-                          locationStatusMap.set(currentMatches[selectedIndex], 'moderate');
-                          
-                          setTimeout(() => {
-                              checkAndAddNewRow(true);
-                          }, 0);
-                      }
-                      break;
-                  case 'Escape':
-                      dropdown.style.display = 'none';
-                      input.blur();
-                      break;
+              let nextIndex;
+              if (this.selectedItemIndex < 0 || this.selectedItemIndex >= this.items.length - 1) {
+                  nextIndex = 0; // 循環到第一項
+              } else {
+                  nextIndex = this.selectedItemIndex + 1;
               }
+              
+              this.selectItem(nextIndex);
+              
+              // 確保選中項可見
+              const items = this.dropdown.querySelectorAll('.custom-autocomplete-item');
+              if (items[nextIndex]) {
+                  items[nextIndex].scrollIntoView({ block: 'nearest' });
+              }
+          }
+          
+          selectPrevItem() {
+              if (!this.items || this.items.length === 0) {
+                  return;
+              }
+              
+              let prevIndex;
+              if (this.selectedItemIndex <= 0) {
+                  prevIndex = this.items.length - 1; // 循環到最後一項
+              } else {
+                  prevIndex = this.selectedItemIndex - 1;
+              }
+              
+              this.selectItem(prevIndex);
+              
+              // 確保選中項可見
+              const items = this.dropdown.querySelectorAll('.custom-autocomplete-item');
+              if (items[prevIndex]) {
+                  items[prevIndex].scrollIntoView({ block: 'nearest' });
+              }
+          }
+          
+          selectCurrentItem() {
+              if (this.selectedItem) {
+                  this.TEXTAREA.value = this.selectedItem;
+              }
+          }
+          
+          hideDropdown() {
+              if (this.dropdown) {
+                  this.dropdown.style.display = 'none';
+              }
+          }
+          
+          getValue() {
+              return this.TEXTAREA.value;
+          }
+      }
+      
+      hot = new Handsontable(container, {
+          data: data,
+          colHeaders: ['Location', 'Severity'],
+          columns: [
+              {
+                  editor: CustomAutocompleteEditor,
+                  renderer: locationRenderer
+              },
+              {
+                  type: 'dropdown',
+                  source: SEVERITIES
+              }
+          ],
+          colWidths: [280, 100], // 設定 Location 列寬一些，Severity 列窄一些
+          minSpareRows: 1,  // 始終保持一個額外的空行
+          contextMenu: true,
+          licenseKey: 'non-commercial-and-evaluation',
+          autoWrapRow: true,
+          autoWrapCol: true,
+          afterChange: function(changes, source) {
+              if (source === 'loadData') return;
+              
+              if (changes) {
+                  changes.forEach(([row, prop, oldValue, newValue]) => {
+                      const rowData = hot.getDataAtRow(row);
+                      const location = rowData[0];
+                      const severity = rowData[1];
+                      
+                      if (location && severity) {
+                          locationStatusMap.set(location, severity);
+                          
+                          // 如果嚴重程度設定了，自動聚焦到下一個空白行
+                          if (row === hot.countRows() - 1) {
+                              setTimeout(() => {
+                                  syncTableWithMap();
+                              }, 10);
+                          }
+                      } else if (location && !severity && oldValue) {
+                          // 如果清除了 severity，也從 map 中移除相應的 severity
+                          locationStatusMap.set(location, '');
+                      } else if (location && !severity) {
+                          // 自動設置默認嚴重程度為 'moderate'
+                          hot.setDataAtCell(row, 1, 'moderate');
+                      } else if (!location && oldValue && prop === 0) {
+                          // 如果清除了 location，則從 map 中移除該項
+                          locationStatusMap.set(oldValue, '');
+                      }
+                  });
+              }
+              
+              syncTableWithMap();
+          },
+          beforeRemoveRow: function(index, amount) {
+              // 刪除行前，將 locationStatusMap 中對應項目的值設為空字串
+              for (let i = index; i < index + amount; i++) {
+                  const location = hot.getDataAtCell(i, 0);
+                  if (location) {
+                      // 不完全刪除，而是設為空字串，這樣該位置以後可以再次選擇
+                      locationStatusMap.set(location, '');
+                  }
+              }
+          }
+      });
+      
+      // 初始化後觸發一次事件
+      document.dispatchEvent(new CustomEvent('locationStatusMapChanged'));
+  }
+  
+  // 將 locationStatusMap 同步到表格
+  function syncTableWithMap() {
+      const tableData = [];
+      
+      // 首先添加已有的行
+      for (let i = 0; i < hot.countRows(); i++) {
+          const location = hot.getDataAtCell(i, 0);
+          
+          if (location) {
+              const severity = locationStatusMap.get(location) || hot.getDataAtCell(i, 1);
+              tableData.push([location, severity]);
+          }
+      }
+      
+      // 確保至少有一個空行
+      if (tableData.length === 0 || (tableData[tableData.length-1][0] !== '' && tableData[tableData.length-1][1] !== '')) {
+          tableData.push(['', '']);
+      }
+      
+      hot.loadData(tableData);
+      
+      // 觸發自定義事件，通知 locationStatusMap 變化
+      const event = new CustomEvent('locationStatusMapChanged');
+      document.dispatchEvent(event);
+  }
+  
+  // State management
+  let locationStatusMap = new Map();
+
+  // Initialize location map
+  function initLocationMap() {
+      locationStatusMap.clear();
+      LOCATIONS.forEach(location => {
+          locationStatusMap.set(location, '');
+      });
+  }
+
+  function createSearchableInput(row) {
+      function findMatches(searchTerm, locations) {
+          const searchWords = searchTerm.toLowerCase()
+              .split(' ')
+              .filter(word => word.length > 0);
+
+          if (searchWords.length === 0) {
+              return locations;
+          }
+
+          return locations.filter(location => {
+              const locationLower = location.toLowerCase();
+              return searchWords.every(word => locationLower.includes(word));
           });
+      }
 
-          input.addEventListener('input', () => {
-              const searchTerm = input.value.toLowerCase();
-              currentMatches = findMatches(searchTerm, LOCATIONS).filter(loc => {
-                  const currentSeverity = locationStatusMap.get(loc);
-                  return !currentSeverity;
-              });
+      const container = document.createElement('div');
+      container.className = 'search-container';
 
-              dropdown.innerHTML = '';
-              selectedIndex = -1;
+      const input = document.createElement('input');
+      input.className = 'search-input';
+      input.placeholder = 'Type to search...';
 
-              currentMatches.forEach((match, index) => {
-                  const item = document.createElement('div');
-                  item.className = 'dropdown-item';
-                  item.textContent = formatDisplayLocation(match);
-                  
-                  item.addEventListener('click', () => {
-                      input.value = formatDisplayLocation(match);
+      const dropdown = document.createElement('div');
+      dropdown.className = 'dropdown';
+
+      let selectedIndex = -1;
+      let currentMatches = [];
+
+      const formatDisplayLocation = (location) => {
+          if (location.includes('basal ganglia') && 
+              (location.startsWith('left ') || location.startsWith('right '))) {
+              return location.replace('basal ganglia', 'basal ganglion');
+          }
+          return location;
+      };
+
+      const selectItem = (index) => {
+          const items = dropdown.querySelectorAll('.dropdown-item');
+          
+          items.forEach(item => item.classList.remove('selected'));
+          
+          if (index >= 0 && index < items.length) {
+              selectedIndex = index;
+              const selectedItem = items[index];
+              selectedItem.classList.add('selected');
+              selectedItem.scrollIntoView({ block: 'nearest' });
+          }
+      };
+
+      input.addEventListener('keydown', (e) => {
+          const items = dropdown.querySelectorAll('.dropdown-item');
+          
+          switch(e.key) {
+              case 'ArrowDown':
+                  e.preventDefault();
+                  selectItem((selectedIndex + 1) % items.length);
+                  break;
+              case 'ArrowUp':
+                  e.preventDefault();
+                  selectItem(selectedIndex <= 0 ? items.length - 1 : selectedIndex - 1);
+                  break;
+              case 'Enter':
+                  e.preventDefault();
+                  if (selectedIndex >= 0 && selectedIndex < items.length) {
+                      const selectedItem = items[selectedIndex];
+                      input.value = selectedItem.textContent;
                       dropdown.style.display = 'none';
                       
                       const select = row.querySelector('select');
                       select.value = 'moderate';
-                      locationStatusMap.set(match, 'moderate');
+                      locationStatusMap.set(currentMatches[selectedIndex], 'moderate');
                       
                       setTimeout(() => {
                           checkAndAddNewRow(true);
                       }, 0);
-                  });
+                  }
+                  break;
+              case 'Escape':
+                  dropdown.style.display = 'none';
+                  input.blur();
+                  break;
+          }
+      });
 
-                  item.addEventListener('mouseover', () => {
-                      selectItem(index);
-                  });
+      input.addEventListener('input', () => {
+          const searchTerm = input.value.toLowerCase();
+          currentMatches = findMatches(searchTerm, LOCATIONS).filter(loc => {
+              const currentSeverity = locationStatusMap.get(loc);
+              return !currentSeverity;
+          });
 
-                  dropdown.appendChild(item);
+          dropdown.innerHTML = '';
+          selectedIndex = -1;
+
+          currentMatches.forEach((match, index) => {
+              const item = document.createElement('div');
+              item.className = 'dropdown-item';
+              item.textContent = formatDisplayLocation(match);
+              
+              item.addEventListener('click', () => {
+                  input.value = formatDisplayLocation(match);
+                  dropdown.style.display = 'none';
+                  
+                  const select = row.querySelector('select');
+                  select.value = 'moderate';
+                  locationStatusMap.set(match, 'moderate');
+                  
+                  setTimeout(() => {
+                      checkAndAddNewRow(true);
+                  }, 0);
               });
 
-              dropdown.style.display = currentMatches.length ? 'block' : 'none';
+              item.addEventListener('mouseover', () => {
+                  selectItem(index);
+              });
+
+              dropdown.appendChild(item);
           });
 
-          input.addEventListener('focus', () => {
-              const event = new Event('input');
-              input.dispatchEvent(event);
-          });
+          dropdown.style.display = currentMatches.length ? 'block' : 'none';
+      });
 
-          document.addEventListener('click', (e) => {
-              if (!container.contains(e.target)) {
-                  dropdown.style.display = 'none';
-              }
-          });
+      input.addEventListener('focus', () => {
+          const event = new Event('input');
+          input.dispatchEvent(event);
+      });
 
-          container.appendChild(input);
-          container.appendChild(dropdown);
-          return container;
-      }
-
-
-      function createSelect(options) {
-          const select = document.createElement('select');
-          options.forEach(option => {
-              const opt = document.createElement('option');
-              opt.value = option;
-              opt.textContent = option;
-              select.appendChild(opt);
-          });
-          
-          select.addEventListener('change', (e) => {
-              const row = e.target.closest('.input-row');
-              const input = row.querySelector('.search-input');
-              if (input.value) {
-                  locationStatusMap.set(input.value, e.target.value);
-              }
-              checkAndAddNewRow();
-          });
-          
-          return select;
-      }
-
-      // 在 script 标签中找到原来的 createRow 函数并替换
-      function createRow() {
-          const row = document.createElement('div');
-          row.className = 'input-row';
-          
-          // 创建删除按钮
-          const deleteBtn = document.createElement('button');
-          deleteBtn.className = 'delete-btn';
-          deleteBtn.innerHTML = '×';
-          deleteBtn.title = 'Delete row';
-          deleteBtn.onclick = (e) => {
-              e.preventDefault();
-              const thisRow = e.target.closest('.input-row');
-              const input = thisRow.querySelector('.search-input');
-              
-              // 如果这行有数据，从 locationStatusMap 中删除
-              if (input.value) {
-                  locationStatusMap.delete(input.value);
-              }
-              
-              // 删除行
-              thisRow.remove();
-              
-              // 如果删除后没有空行，添加一个新行
-              checkAndAddNewRow();
-          };
-          
-          const searchableInput = createSearchableInput(row);
-          const severitySelect = createSelect(SEVERITIES);
-          
-          row.appendChild(deleteBtn);
-          row.appendChild(searchableInput);
-          row.appendChild(severitySelect);
-          
-          severitySelect.value = '';
-          
-          return row;
-      }
-
-      function checkAndAddNewRow(shouldFocus = false) {
-          const rows = document.querySelectorAll('.input-row');
-          const lastRow = rows[rows.length - 1];
-          
-          if (!lastRow) {
-              const newRow = createRow();
-              document.getElementById('input-grid').appendChild(newRow);
-              if (shouldFocus) {
-                  setTimeout(() => {
-                      const input = newRow.querySelector('.search-input');
-                      input.focus();
-                  }, 0);
-              }
-              return;
+      document.addEventListener('click', (e) => {
+          if (!container.contains(e.target)) {
+              dropdown.style.display = 'none';
           }
+      });
 
-          const input = lastRow.querySelector('.search-input');
-          const select = lastRow.querySelector('select');
-          
-          if (input.value.trim() !== '') {
-              locationStatusMap.set(input.value, select.value);
-              const newRow = createRow();
-              document.getElementById('input-grid').appendChild(newRow);
-              if (shouldFocus) {
-                  setTimeout(() => {
-                      const input = newRow.querySelector('.search-input');
-                      input.focus();
-                  }, 0);
-              }
+      container.appendChild(input);
+      container.appendChild(dropdown);
+      return container;
+  }
+
+
+  function createSelect(options) {
+      const select = document.createElement('select');
+      options.forEach(option => {
+          const opt = document.createElement('option');
+          opt.value = option;
+          opt.textContent = option;
+          select.appendChild(opt);
+      });
+      
+      select.addEventListener('change', (e) => {
+          const row = e.target.closest('.input-row');
+          const input = row.querySelector('.search-input');
+          if (input.value) {
+              locationStatusMap.set(input.value, e.target.value);
           }
+          checkAndAddNewRow();
+      });
+      
+      return select;
+  }
+
+  // 在 script 标签中找到原来的 createRow 函数并替换
+  function createRow() {
+      const row = document.createElement('div');
+      row.className = 'input-row';
+      
+      // 创建删除按钮
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'delete-btn';
+      deleteBtn.innerHTML = '×';
+      deleteBtn.title = 'Delete row';
+      deleteBtn.onclick = (e) => {
+          e.preventDefault();
+          const thisRow = e.target.closest('.input-row');
+          const input = thisRow.querySelector('.search-input');
+          
+          // 如果这行有数据，从 locationStatusMap 中删除
+          if (input.value) {
+              locationStatusMap.delete(input.value);
+          }
+          
+          // 删除行
+          thisRow.remove();
+          
+          // 如果删除后没有空行，添加一个新行
+          checkAndAddNewRow();
+      };
+      
+      const searchableInput = createSearchableInput(row);
+      const severitySelect = createSelect(SEVERITIES);
+      
+      row.appendChild(deleteBtn);
+      row.appendChild(searchableInput);
+      row.appendChild(severitySelect);
+      
+      severitySelect.value = '';
+      
+      return row;
+  }
+
+  function checkAndAddNewRow(shouldFocus = false) {
+      const rows = document.querySelectorAll('.input-row');
+      const lastRow = rows[rows.length - 1];
+      
+      if (!lastRow) {
+          const newRow = createRow();
+          document.getElementById('input-grid').appendChild(newRow);
+          if (shouldFocus) {
+              setTimeout(() => {
+                  const input = newRow.querySelector('.search-input');
+                  input.focus();
+              }, 0);
+          }
+          return;
       }
 
+      const input = lastRow.querySelector('.search-input');
+      const select = lastRow.querySelector('select');
+      
+      if (input.value.trim() !== '') {
+          locationStatusMap.set(input.value, select.value);
+          const newRow = createRow();
+          document.getElementById('input-grid').appendChild(newRow);
+          if (shouldFocus) {
+              setTimeout(() => {
+                  const input = newRow.querySelector('.search-input');
+                  input.focus();
+              }, 0);
+          }
+      }
+  }
 
-      function collectDataFromRows() {
-          const rows = document.querySelectorAll('.input-row');
-          const currentData = [];
+
+  function collectDataFromRows() {
+      const currentData = [];
+      
+      // 從 Handsontable 收集數據
+      for (let i = 0; i < hot.countRows(); i++) {
+          const location = hot.getDataAtCell(i, 0);
+          const severity = hot.getDataAtCell(i, 1);
           
-          rows.forEach(row => {
-              const input = row.querySelector('.search-input');
-              const select = row.querySelector('select');
+          if (location && severity) {
+              let side = '';
+              let area = location;
               
-              if (input.value && select.value) {
-                  let location = input.value;
-                  let side = '';
-                  let area = location;
-                  
-                  // 处理位置和侧面信息
-                  if (!BILATERAL_ONLY_AREAS.includes(location)) {
-                      SIDES.forEach(s => {
-                          if (location.startsWith(s + ' ')) {
-                              side = s;
-                              area = location.substring(s.length + 1);
-                          }
-                      });
-                  }
-
-                  currentData.push({
-                      side: side,
-                      area: area,
-                      severity: select.value,
-                      fullLocation: location
+              // 處理位置和側面信息
+              if (!BILATERAL_ONLY_AREAS.includes(location)) {
+                  SIDES.forEach(s => {
+                      if (location.startsWith(s + ' ')) {
+                          side = s;
+                          area = location.substring(s.length + 1);
+                      }
                   });
               }
-          });
-          
-          return currentData;
-      }
-      function getTableData() {
-          const data = [];
-          for (const [location, severity] of locationStatusMap) {
-              if (severity) {
-                  let side = '';
-                  let area = location;
-                  
-                  if (!BILATERAL_ONLY_AREAS.includes(location)) {
-                      SIDES.forEach(s => {
-                          if (location.startsWith(s + ' ')) {
-                              side = s;
-                              area = location.substring(s.length + 1);
-                          }
-                      });
-                  }
 
-                  data.push({
-                      side: side,
-                      area: area,
-                      severity: severity,
-                      fullLocation: location
-                  });
-              }
+              currentData.push({
+                  side: side,
+                  area: area,
+                  severity: severity,
+                  fullLocation: location
+              });
           }
-          return data;
-      }
-
-      // 在 script 标签中找到原来的 formatRegions 函数并替换
-      function formatRegions(regions, desc) {
-          if (regions.length === 0) return '';
-          
-          // 创建一个映射来存储完整位置及其在原始数组中的索引
-          const locationOrder = new Map();
-          LOCATIONS.forEach((loc, index) => {
-              locationOrder.set(loc, index);
-          });
-          
-          // 按照原始数组的顺序排序区域
-          const sortedRegions = [...regions].sort((a, b) => {
-              const aFullLoc = a.side ? `${a.side} ${a.area}` : a.area;
-              const bFullLoc = b.side ? `${b.side} ${b.area}` : b.area;
-              return locationOrder.get(aFullLoc) - locationOrder.get(bFullLoc);
-          });
-          
-          const locDescriptions = sortedRegions.map(r => {
-              if (BILATERAL_ONLY_AREAS.includes(r.area)) {
-                  return r.area;
-              } else {
-                  const sidePrefix = r.side ? `${r.side} ` : '';
-                  // 处理 basal ganglia/ganglion 的特殊情况
-                  let area = r.area;
-                  if (area === 'basal ganglia' && r.side && r.side !== 'bilateral') {
-                      area = 'basal ganglion';  // 单侧时使用单数形式
-                  }
-                  return `${sidePrefix}${area}`;
-              }
-          });
-          
-          if (locDescriptions.length === 1) {
-              return `${desc} in the ${locDescriptions[0]} region`;
-          }
-          if (locDescriptions.length === 2) {
-              return `${desc} in the ${locDescriptions[0]} and ${locDescriptions[1]} regions`;
-          }
-          return `${desc} in the ${locDescriptions.slice(0, -1).join(', ')}, and ${locDescriptions[locDescriptions.length - 1]} regions`;
-      }
-
-      function createHypoperfusionText(regions, message) {
-          if (regions.length === 0) return '';
-          const regionText = regions.join(", ") + " region" + (regions.length > 1 ? "s" : "");
-          return "Hypoperfusion in the " + regionText + " " + message;
-      }
-
-      function capitalizeFirstLetter(string) {
-          return string.charAt(0).toUpperCase() + string.slice(1);
-      }
-
-
-      function pluralizeRegions(text) {
-        // Helper function to process a single part
-        function processRegionText(part) {
-          if (part.trim().endsWith('region')) {
-            if (part.includes(' and ') || part.includes('bilateral')) {
-              return part.replace(/region$/, 'regions');
-            }
-          }
-          return part;
-        }
-
-        // First split by semicolons
-        let semicolonParts = text.split(';');
-        
-        // Process each semicolon-separated part, which might contain periods
-        return semicolonParts.map(semicolonPart => {
-          // Split each semicolon part by periods
-          let periodParts = semicolonPart.split('.');
-          
-          // Process each period-separated part
-          return periodParts.map(periodPart => {
-            return processRegionText(periodPart.trim());
-          }).join('.');  // Rejoin with periods
-        }).join(';');  // Rejoin with semicolons
-      }
-
-      function processReportText(text) {
-        if (!text) return text;
-        
-        // If there are no semicolons or periods, process the whole text
-        if (!text.includes(';') && !text.includes('.')) {
-          if (text.endsWith('region') && 
-              (text.includes(' and ') || text.includes('bilateral'))) {
-            return text.replace(/region$/, 'regions');
-          }
-          return text;
-        }
-        
-        // Process text with pluralization
-        return pluralizeRegions(text);
       }
       
-      function generateReports() {
-          const data = collectDataFromRows();
-          const atrophyFindings = window.atrophyFindings || {
-              fissures: false,
-              ventricles: false,
-              sulci: false,
-              interhemisphericFissures: false
-          };
-
-          function generateAtrophyText() {
-              const findings = [];
-              if (atrophyFindings.fissures) findings.push("cerebral fissures");
-              if (atrophyFindings.ventricles) findings.push("ventricles");
-              if (atrophyFindings.sulci) findings.push("cerebral sulci");
-              if (atrophyFindings.interhemisphericFissures) findings.push("interhemispheric fissures");
+      return currentData;
+  }
+  function getTableData() {
+      const data = [];
+      for (const [location, severity] of locationStatusMap) {
+          if (severity) {
+              let side = '';
+              let area = location;
               
-              if (findings.length === 0) return "";
-              if (findings.length === 1) return `Prominent ${findings[0]} are seen.`;
-              if (findings.length === 2) return `Prominent ${findings[0]} and ${findings[1]} are seen.`;
-              const last = findings.pop();
-              return `Prominent ${findings.join(', ')}, and ${last} are seen.`;
-          }
+              if (!BILATERAL_ONLY_AREAS.includes(location)) {
+                  SIDES.forEach(s => {
+                      if (location.startsWith(s + ' ')) {
+                          side = s;
+                          area = location.substring(s.length + 1);
+                      }
+                  });
+              }
 
-          function formatCerebellarDiaschisisText(data, severity) {
-              const cerebellarRegions = [];
-              data.forEach(item => {
-                  if (item.area.includes('cerebellar')) {
-                      cerebellarRegions.push(item.fullLocation);
-                  }
+              data.push({
+                  side: side,
+                  area: area,
+                  severity: severity,
+                  fullLocation: location
               });
-              
-              if (cerebellarRegions.length === 0) return '';
-              
-              let severityText = '';
-              switch(severity) {
-                  case 'marked':
-                  case 'moderate':
-                      severityText = 'suspect cross cerebellar diaschisis';
-                      break;
-                  case 'mild':
-                      severityText = 'possible cross cerebellar diaschisis';
-                      break;
-                  case 'slight':
-                      severityText = 'cross cerebellar diaschisis cannot be excluded completely';
-                      break;
-              }
-              
-              return `Hypoperfusion in the ${cerebellarRegions.join(' and ')} region${cerebellarRegions.length > 1 ? 's' : ''}, ${severityText}`;
           }
+      }
+      return data;
+  }
 
-          function formatText(text) {
-              text = text.charAt(0).toUpperCase() + text.slice(1);
-              return text
-                  .replace(/\s+/g, ' ')
-                  .replace(/\.+/g, '.')
-                  .replace(/\.\s*\./g, '.')
-                  .replace(/\./g, '. ')
-                  .trim()
-                  .replace(/\s*\.$/, '.')
-                  .replace(/\s\s/g, ' ');
-          }
-
-          function formatNumberedText(impressionArray) {
-              if (impressionArray.length === 0) return '';
-              if (impressionArray.length === 1) return formatText(impressionArray[0]);
-              
-              let result = '';
-              for (let i = 0; i < impressionArray.length; i++) {
-                  result += `\n${i + 1}. ${formatText(impressionArray[i])}`;
-              }
-              return result;
-          }
-
-          // Generate findings text
-          const regAlz = ["posterior cingulate", "posterior parietal", "precuneus"];
-          const regDlb = ["occipital"];
-
-          const valMar = data.filter(x => x.severity === 'marked');
-          const valMod = data.filter(x => x.severity === 'moderate');
-          const valMil = data.filter(x => x.severity === 'mild');
-          const valSli = data.filter(x => x.severity === 'slight');
-          const atrophyText = generateAtrophyText();
-
-          const txtMar = formatRegions(valMar, 'markedly decreased radioactivity');
-          const txtMod = formatRegions(valMod, 'decreased radioactivity');
-          const txtMil = formatRegions(valMil, 'mildly decreased radioactivity');
-          const txtSli = formatRegions(valSli, 'slightly decreased radioactivity');
-
-          let txtFnd = valMar.concat(valMod, valMil, valSli).length === 0 ? 
-              'Tc-99m ECD brain perfusion scan with SPECT shows no definite abnormal radioactivity in the brain.' :
-              'Tc-99m ECD brain perfusion scan with SPECT shows ' + [txtMar, txtMod, txtMil, txtSli].filter(x => x !== '').join("; ") + ". ";
-
-          if (atrophyText) {
-              txtFnd = txtFnd + (txtFnd.endsWith('  ') ? '' : txtFnd.endsWith(' ') ? '' : ' ') + atrophyText;
-          }
-
-          // Generate impression text
-          let baseImpressions = [];
-
-          if (window.cerebellarDiaschisis) {
-              const nonCerebellarData = data.filter(item => !item.area.includes('cerebellar'));
-              const cerebellarData = data.filter(item => item.area.includes('cerebellar'));
-
-              // Generate main impression text without cerebellar regions
-              const valMarNonCereb = nonCerebellarData.filter(x => x.severity === 'marked');
-              const valModNonCereb = nonCerebellarData.filter(x => x.severity === 'moderate');
-              const valMilNonCereb = nonCerebellarData.filter(x => x.severity === 'mild');
-              const valSliNonCereb = nonCerebellarData.filter(x => x.severity === 'slight');
-
-              const txtMarNonCereb = formatRegions(valMarNonCereb, 'marked hypoperfusion');
-              const txtModNonCereb = formatRegions(valModNonCereb, 'hypoperfusion');
-              const txtMilNonCereb = formatRegions(valMilNonCereb, 'mild hypoperfusion');
-              const txtSliNonCereb = formatRegions(valSliNonCereb, 'suspicious hypoperfusion');
-
-              let mainText = [txtMarNonCereb, txtModNonCereb, txtMilNonCereb, txtSliNonCereb]
-                  .filter(x => x !== '')
-                  .join('; ');
-
-              if (nonCerebellarData.length > 0) {
-                  baseImpressions.push(mainText + '.');
-              }
-
-              if (cerebellarData.length > 0) {
-                  const maxSeverity = cerebellarData.reduce((max, item) => {
-                      const severityOrder = { marked: 4, moderate: 3, mild: 2, slight: 1 };
-                      return severityOrder[item.severity] > severityOrder[max] ? item.severity : max;
-                  }, 'slight');
-
-                  const diaschisisText = formatCerebellarDiaschisisText(cerebellarData, maxSeverity);
-                  if (diaschisisText) {
-                      baseImpressions.push(diaschisisText + '.');
-                  }
-              }
+  // 在 script 标签中找到原来的 formatRegions 函数并替换
+  function formatRegions(regions, desc) {
+      if (regions.length === 0) return '';
+      
+      // 创建一个映射来存储完整位置及其在原始数组中的索引
+      const locationOrder = new Map();
+      LOCATIONS.forEach((loc, index) => {
+          locationOrder.set(loc, index);
+      });
+      
+      // 按照原始数组的顺序排序区域
+      const sortedRegions = [...regions].sort((a, b) => {
+          const aFullLoc = a.side ? `${a.side} ${a.area}` : a.area;
+          const bFullLoc = b.side ? `${b.side} ${b.area}` : b.area;
+          return locationOrder.get(aFullLoc) - locationOrder.get(bFullLoc);
+      });
+      
+      const locDescriptions = sortedRegions.map(r => {
+          if (BILATERAL_ONLY_AREAS.includes(r.area)) {
+              return r.area;
           } else {
-              const mainImp = valMar.concat(valMod, valMil, valSli).length === 0 ?
-                  'No definite abnormal cerebral perfusion is detected.' :
-                  txtFnd.replace('Tc-99m ECD brain perfusion scan with SPECT shows ', '')
-                      .replace('markedly decreased radioactivity', 'marked hypoperfusion')
-                      .replace('decreased radioactivity', 'hypoperfusion')
-                      .replace('mildly decreased radioactivity', 'mild hypoperfusion')
-                      .replace('slightly decreased radioactivity', 'suspicious hypoperfusion')
-                      .replace(/\.\s*Prominent.*?are seen\./, '');
-              
-              baseImpressions.push(mainImp);
-          }
-
-          if (baseImpressions.length === 0) {
-              baseImpressions.push('No definite abnormal cerebral perfusion is detected.');
-          }
-
-          // Generate ALZ and DLB specific texts
-          let posAlz = regAlz.filter(x => data.some(d => d.area === x));
-          let posDlb = regDlb.filter(x => data.some(d => d.area === x));
-
-          let txtAlz = createHypoperfusionText(posAlz, "has been reported to be commonly observed in patients with Alzheimer's disease.");
-          let txtDlb = createHypoperfusionText(posDlb, "is considered a supportive biomarker of dementia with Lewy bodies.");
-
-          let txtAlzCor = posDlb.length > 0 ? 
-              `${posAlz.length > 0 ? "However" : "Besides"}, hypoperfusion in the occipital area is usually not observed in Alzheimer's disease. Clinical correlation is recommended.` : "";
-          let txtDlbCor = posAlz.length > 0 ? "Clinical correlation is recommended." : "";
-
-          txtAlz = txtAlz || "There is no apparently decreased perfusion in the parietal association areas, posterior cingulate, precuneus, which are the regions commonly affected in Alzheimer's disease.";
-          txtDlb = txtDlb || "There is no definite evidence of occipital hypoperfusion, a supportive biomarker of dementia with Lewy bodies, observed in this patient.";
-
-          if (txtAlzCor.length > 0) txtAlz = txtAlz + txtAlzCor;
-          if (txtDlbCor.length > 0) txtDlb = txtDlb + txtDlbCor;
-
-          // Create final impressions arrays
-          let impressions = [...baseImpressions];
-          
-          // For ALZ and DLB impressions, only add the supportive text to non-cerebellar findings
-          let alzImpressions = baseImpressions.map(imp => {
-              // If this is a cerebellar diaschisis impression, don't add ALZ text
-              if (imp.includes('cerebellar diaschisis')) {
-                  return imp;
+              const sidePrefix = r.side ? `${r.side} ` : '';
+              // 处理 basal ganglia/ganglion 的特殊情况
+              let area = r.area;
+              if (area === 'basal ganglia' && r.side && r.side !== 'bilateral') {
+                  area = 'basal ganglion';  // 单侧时使用单数形式
               }
-              return imp + (imp.endsWith('.') ? '' : '.') + txtAlz;
+              return `${sidePrefix}${area}`;
+          }
+      });
+      
+      if (locDescriptions.length === 1) {
+          return `${desc} in the ${locDescriptions[0]} region`;
+      }
+      if (locDescriptions.length === 2) {
+          return `${desc} in the ${locDescriptions[0]} and ${locDescriptions[1]} regions`;
+      }
+      return `${desc} in the ${locDescriptions.slice(0, -1).join(', ')}, and ${locDescriptions[locDescriptions.length - 1]} regions`;
+  }
+
+  function createHypoperfusionText(regions, message) {
+      if (regions.length === 0) return '';
+      const regionText = regions.join(", ") + " region" + (regions.length > 1 ? "s" : "");
+      return "Hypoperfusion in the " + regionText + " " + message;
+  }
+
+  function capitalizeFirstLetter(string) {
+      return string.charAt(0).toUpperCase() + string.slice(1);
+  }
+
+
+  function pluralizeRegions(text) {
+    // Helper function to process a single part
+    function processRegionText(part) {
+      if (part.trim().endsWith('region')) {
+        if (part.includes(' and ') || part.includes('bilateral')) {
+          return part.replace(/region$/, 'regions');
+        }
+      }
+      return part;
+    }
+
+    // First split by semicolons
+    let semicolonParts = text.split(';');
+    
+    // Process each semicolon-separated part, which might contain periods
+    return semicolonParts.map(semicolonPart => {
+      // Split each semicolon part by periods
+      let periodParts = semicolonPart.split('.');
+      
+      // Process each period-separated part
+      return periodParts.map(periodPart => {
+        return processRegionText(periodPart.trim());
+      }).join('.');  // Rejoin with periods
+    }).join(';');  // Rejoin with semicolons
+  }
+
+  function processReportText(text) {
+    if (!text) return text;
+    
+    // If there are no semicolons or periods, process the whole text
+    if (!text.includes(';') && !text.includes('.')) {
+      if (text.endsWith('region') && 
+          (text.includes(' and ') || text.includes('bilateral'))) {
+        return text.replace(/region$/, 'regions');
+      }
+      return text;
+    }
+    
+    // Process text with pluralization
+    return pluralizeRegions(text);
+  }
+  
+  function generateReports() {
+      const data = collectDataFromRows();
+      const atrophyFindings = window.atrophyFindings || {
+          fissures: false,
+          ventricles: false,
+          sulci: false,
+          interhemisphericFissures: false
+      };
+
+      function generateAtrophyText() {
+          const findings = [];
+          if (atrophyFindings.fissures) findings.push("cerebral fissures");
+          if (atrophyFindings.ventricles) findings.push("ventricles");
+          if (atrophyFindings.sulci) findings.push("cerebral sulci");
+          if (atrophyFindings.interhemisphericFissures) findings.push("interhemispheric fissures");
+          
+          if (findings.length === 0) return "";
+          if (findings.length === 1) return `Prominent ${findings[0]} are seen.`;
+          if (findings.length === 2) return `Prominent ${findings[0]} and ${findings[1]} are seen.`;
+          const last = findings.pop();
+          return `Prominent ${findings.join(', ')}, and ${last} are seen.`;
+      }
+
+      function formatCerebellarDiaschisisText(data, severity) {
+          const cerebellarRegions = [];
+          data.forEach(item => {
+              if (item.area.includes('cerebellar')) {
+                  cerebellarRegions.push(item.fullLocation);
+              }
           });
           
-          let dlbImpressions = baseImpressions.map(imp => {
-              // If this is a cerebellar diaschisis impression, don't add DLB text
-              if (imp.includes('cerebellar diaschisis')) {
-                  return imp;
-              }
-              return imp + (imp.endsWith('.') ? '' : '.') + txtDlb;
-          });
+          if (cerebellarRegions.length === 0) return '';
+          
+          let severityText = '';
+          switch(severity) {
+              case 'marked':
+              case 'moderate':
+                  severityText = 'suspect cross cerebellar diaschisis';
+                  break;
+              case 'mild':
+                  severityText = 'possible cross cerebellar diaschisis';
+                  break;
+              case 'slight':
+                  severityText = 'cross cerebellar diaschisis cannot be excluded completely';
+                  break;
+          }
+          
+          return `Hypoperfusion in the ${cerebellarRegions.join(' and ')} region${cerebellarRegions.length > 1 ? 's' : ''}, ${severityText}`;
+      }
 
-          // Add atrophy finding if present
-          if (atrophyText) {
-              impressions.push("Suspect cerebral atrophy.");
-              alzImpressions.push("Suspect cerebral atrophy.");
-              dlbImpressions.push("Suspect cerebral atrophy.");
+      function formatText(text) {
+          text = text.charAt(0).toUpperCase() + text.slice(1);
+          return text
+              .replace(/\s+/g, ' ')
+              .replace(/\.+/g, '.')
+              .replace(/\.\s*\./g, '.')
+              .replace(/\./g, '. ')
+              .trim()
+              .replace(/\s*\.$/, '.')
+              .replace(/\s\s/g, ' ');
+      }
+
+      function formatNumberedText(impressionArray) {
+          if (impressionArray.length === 0) return '';
+          if (impressionArray.length === 1) return formatText(impressionArray[0]);
+          
+          let result = '';
+          for (let i = 0; i < impressionArray.length; i++) {
+              result += `\n${i + 1}. ${formatText(impressionArray[i])}`;
+          }
+          return result;
+      }
+
+      // Generate findings text
+      const regAlz = ["posterior cingulate", "posterior parietal", "precuneus"];
+      const regDlb = ["occipital"];
+
+      const valMar = data.filter(x => x.severity === 'marked');
+      const valMod = data.filter(x => x.severity === 'moderate');
+      const valMil = data.filter(x => x.severity === 'mild');
+      const valSli = data.filter(x => x.severity === 'slight');
+      const atrophyText = generateAtrophyText();
+
+      const txtMar = formatRegions(valMar, 'markedly decreased radioactivity');
+      const txtMod = formatRegions(valMod, 'decreased radioactivity');
+      const txtMil = formatRegions(valMil, 'mildly decreased radioactivity');
+      const txtSli = formatRegions(valSli, 'slightly decreased radioactivity');
+
+      let txtFnd = valMar.concat(valMod, valMil, valSli).length === 0 ? 
+          'Tc-99m ECD brain perfusion scan with SPECT shows no definite abnormal radioactivity in the brain.' :
+          'Tc-99m ECD brain perfusion scan with SPECT shows ' + [txtMar, txtMod, txtMil, txtSli].filter(x => x !== '').join("; ") + ". ";
+
+      if (atrophyText) {
+          txtFnd = txtFnd + (txtFnd.endsWith('  ') ? '' : txtFnd.endsWith(' ') ? '' : ' ') + atrophyText;
+      }
+
+      // Generate impression text
+      let baseImpressions = [];
+
+      if (window.cerebellarDiaschisis) {
+          const nonCerebellarData = data.filter(item => !item.area.includes('cerebellar'));
+          const cerebellarData = data.filter(item => item.area.includes('cerebellar'));
+
+          // Generate main impression text without cerebellar regions
+          const valMarNonCereb = nonCerebellarData.filter(x => x.severity === 'marked');
+          const valModNonCereb = nonCerebellarData.filter(x => x.severity === 'moderate');
+          const valMilNonCereb = nonCerebellarData.filter(x => x.severity === 'mild');
+          const valSliNonCereb = nonCerebellarData.filter(x => x.severity === 'slight');
+
+          const txtMarNonCereb = formatRegions(valMarNonCereb, 'marked hypoperfusion');
+          const txtModNonCereb = formatRegions(valModNonCereb, 'hypoperfusion');
+          const txtMilNonCereb = formatRegions(valMilNonCereb, 'mild hypoperfusion');
+          const txtSliNonCereb = formatRegions(valSliNonCereb, 'suspicious hypoperfusion');
+
+          let mainText = [txtMarNonCereb, txtModNonCereb, txtMilNonCereb, txtSliNonCereb]
+              .filter(x => x !== '')
+              .join('; ');
+
+          if (nonCerebellarData.length > 0) {
+              baseImpressions.push(mainText + '.');
           }
 
-          return {
-              findings: txtFnd,
-              impression: formatNumberedText(impressions),
-              alz: formatNumberedText(alzImpressions),
-              dlb: formatNumberedText(dlbImpressions)
-          };
+          if (cerebellarData.length > 0) {
+              const maxSeverity = cerebellarData.reduce((max, item) => {
+                  const severityOrder = { marked: 4, moderate: 3, mild: 2, slight: 1 };
+                  return severityOrder[item.severity] > severityOrder[max] ? item.severity : max;
+              }, 'slight');
+
+              const diaschisisText = formatCerebellarDiaschisisText(cerebellarData, maxSeverity);
+              if (diaschisisText) {
+                  baseImpressions.push(diaschisisText + '.');
+              }
+          }
+      } else {
+          const mainImp = valMar.concat(valMod, valMil, valSli).length === 0 ?
+              'No definite abnormal cerebral perfusion is detected.' :
+              txtFnd.replace('Tc-99m ECD brain perfusion scan with SPECT shows ', '')
+                  .replace('markedly decreased radioactivity', 'marked hypoperfusion')
+                  .replace('decreased radioactivity', 'hypoperfusion')
+                  .replace('mildly decreased radioactivity', 'mild hypoperfusion')
+                  .replace('slightly decreased radioactivity', 'suspicious hypoperfusion')
+                  .replace(/\.\s*Prominent.*?are seen\./, '');
+          
+          baseImpressions.push(mainImp);
       }
 
-
-      function clearTable() {
-          const grid = document.getElementById('input-grid');
-          grid.innerHTML = '';
-          initLocationMap();  // 重置位置映射
-          checkAndAddNewRow();
-          showNotification('Table cleared');
+      if (baseImpressions.length === 0) {
+          baseImpressions.push('No definite abnormal cerebral perfusion is detected.');
       }
 
-      function showNotification(message) {
-          const notification = document.getElementById('notification');
-          notification.textContent = message;
-          notification.style.display = 'block';
-          setTimeout(() => {
-              notification.style.display = 'none';
-          }, 2000);
+      // Generate ALZ and DLB specific texts
+      let posAlz = regAlz.filter(x => data.some(d => d.area === x));
+      let posDlb = regDlb.filter(x => data.some(d => d.area === x));
+
+      let txtAlz = createHypoperfusionText(posAlz, "has been reported to be commonly observed in patients with Alzheimer's disease.");
+      let txtDlb = createHypoperfusionText(posDlb, "is considered a supportive biomarker of dementia with Lewy bodies.");
+
+      let txtAlzCor = posDlb.length > 0 ? 
+          `${posAlz.length > 0 ? "However" : "Besides"}, hypoperfusion in the occipital area is usually not observed in Alzheimer's disease. Clinical correlation is recommended.` : "";
+      let txtDlbCor = posAlz.length > 0 ? "Clinical correlation is recommended." : "";
+
+      txtAlz = txtAlz || "There is no apparently decreased perfusion in the parietal association areas, posterior cingulate, precuneus, which are the regions commonly affected in Alzheimer's disease.";
+      txtDlb = txtDlb || "There is no definite evidence of occipital hypoperfusion, a supportive biomarker of dementia with Lewy bodies, observed in this patient.";
+
+      if (txtAlzCor.length > 0) txtAlz = txtAlz + txtAlzCor;
+      if (txtDlbCor.length > 0) txtDlb = txtDlb + txtDlbCor;
+
+      // Create final impressions arrays
+      let impressions = [...baseImpressions];
+      
+      // For ALZ and DLB impressions, only add the supportive text to non-cerebellar findings
+      let alzImpressions = baseImpressions.map(imp => {
+          // If this is a cerebellar diaschisis impression, don't add ALZ text
+          if (imp.includes('cerebellar diaschisis')) {
+              return imp;
+          }
+          return imp + (imp.endsWith('.') ? '' : '.') + txtAlz;
+      });
+      
+      let dlbImpressions = baseImpressions.map(imp => {
+          // If this is a cerebellar diaschisis impression, don't add DLB text
+          if (imp.includes('cerebellar diaschisis')) {
+              return imp;
+          }
+          return imp + (imp.endsWith('.') ? '' : '.') + txtDlb;
+      });
+
+      // Add atrophy finding if present
+      if (atrophyText) {
+          impressions.push("Suspect cerebral atrophy.");
+          alzImpressions.push("Suspect cerebral atrophy.");
+          dlbImpressions.push("Suspect cerebral atrophy.");
       }
 
-      async function copyReport(type) {
+      return {
+          findings: txtFnd,
+          impression: formatNumberedText(impressions),
+          alz: formatNumberedText(alzImpressions),
+          dlb: formatNumberedText(dlbImpressions)
+      };
+  }
+
+
+  function clearTable() {
+      // 清空 Handsontable
+      hot.loadData([['', '']]);
+      
+      // 重置位置狀態，但保留位置鍵
+      for (const location of locationStatusMap.keys()) {
+          locationStatusMap.set(location, '');
+      }
+      
+      // 刷新表格
+      syncTableWithMap();
+      
+      // 額外觸發一次事件，確保 cerebellar diaschisis checkbox 更新
+      document.dispatchEvent(new CustomEvent('locationStatusMapChanged'));
+      
+      showNotification('Table cleared');
+  }
+
+  function showNotification(message) {
+      const notification = document.getElementById('notification');
+      notification.textContent = message;
+      notification.style.display = 'block';
+      setTimeout(() => {
+          notification.style.display = 'none';
+      }, 2000);
+  }
+
+  async function copyReport(type) {
+      try {
+          // Debug output
+          console.log('Starting copy process for type:', type);
+          
+          const reports = generateReports();
+          console.log('Generated reports:', reports);
+          
+          const text = reports[type];
+          console.log('Text to copy:', text);
+          
+          if (text === undefined || text === null) {
+              throw new Error('No text generated');
+          }
+
+          // Create and append textarea
+          const textArea = document.createElement('textarea');
+          textArea.value = text;
+          textArea.style.position = 'fixed';  // Make it invisible
+          textArea.style.opacity = '0';
+          document.body.appendChild(textArea);
+          
+          // Select and copy
+          textArea.focus();
+          textArea.select();
+          
           try {
-              // Debug output
-              console.log('Starting copy process for type:', type);
-              
-              const reports = generateReports();
-              console.log('Generated reports:', reports);
-              
-              const text = reports[type];
-              console.log('Text to copy:', text);
-              
-              if (text === undefined || text === null) {
-                  throw new Error('No text generated');
+              // Try modern clipboard API first
+              await navigator.clipboard.writeText(text);
+              console.log('Copied using Clipboard API');
+          } catch (clipError) {
+              console.log('Clipboard API failed:', clipError);
+              // Fallback to execCommand
+              const success = document.execCommand('copy');
+              console.log('execCommand result:', success);
+              if (!success) {
+                  throw new Error('execCommand failed');
               }
-
-              // Create and append textarea
-              const textArea = document.createElement('textarea');
-              textArea.value = text;
-              textArea.style.position = 'fixed';  // Make it invisible
-              textArea.style.opacity = '0';
-              document.body.appendChild(textArea);
-              
-              // Select and copy
-              textArea.focus();
-              textArea.select();
-              
-              try {
-                  // Try modern clipboard API first
-                  await navigator.clipboard.writeText(text);
-                  console.log('Copied using Clipboard API');
-              } catch (clipError) {
-                  console.log('Clipboard API failed:', clipError);
-                  // Fallback to execCommand
-                  const success = document.execCommand('copy');
-                  console.log('execCommand result:', success);
-                  if (!success) {
-                      throw new Error('execCommand failed');
-                  }
-              }
-              
-              // Cleanup
-              document.body.removeChild(textArea);
-              showNotification('Copied to clipboard');
-              
-          } catch (err) {
-              console.error('Copy failed:', err);
-              console.error('Error stack:', err.stack);
-              showNotification(`Failed to copy: ${err.message}`);
           }
+          
+          // Cleanup
+          document.body.removeChild(textArea);
+          showNotification('Copied to clipboard');
+          
+      } catch (err) {
+          console.error('Copy failed:', err);
+          console.error('Error stack:', err.stack);
+          showNotification(`Failed to copy: ${err.message}`);
       }
+  }
 </script>
