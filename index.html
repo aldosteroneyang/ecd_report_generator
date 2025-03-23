@@ -1385,7 +1385,9 @@ const AREAS = [
       });
       
       if (locDescriptions.length === 1) {
-          return `${desc} in the ${locDescriptions[0]} region`;
+          // 如果只有一個區域，但它是雙側的，使用複數形式
+          const isBilateral = sortedRegions[0].side === 'bilateral';
+          return `${desc} in the ${locDescriptions[0]} ${isBilateral ? 'regions' : 'region'}`;
       }
       if (locDescriptions.length === 2) {
           return `${desc} in the ${locDescriptions[0]} and ${locDescriptions[1]} regions`;
@@ -1395,7 +1397,11 @@ const AREAS = [
 
   function createHypoperfusionText(regions, message) {
       if (regions.length === 0) return '';
-      const regionText = regions.join(", ") + " region" + (regions.length > 1 ? "s" : "");
+      
+      // 檢查是否應該使用複數形式
+      const usePlural = regions.length > 1 || regions.some(region => region.includes('bilateral'));
+      
+      const regionText = regions.join(", ") + " region" + (usePlural ? "s" : "");
       return "Hypoperfusion in the " + regionText + " " + message;
   }
 
@@ -1493,7 +1499,10 @@ const AREAS = [
                   break;
           }
           
-          return `Hypoperfusion in the ${cerebellarRegions.join(' and ')} region${cerebellarRegions.length > 1 ? 's' : ''}, ${severityText}`;
+          // 檢查是否應該使用複數形式（如果有多個區域或包含雙側區域）
+          const usePlural = cerebellarRegions.length > 1 || cerebellarRegions.some(region => region.includes('bilateral'));
+          
+          return `Hypoperfusion in the ${cerebellarRegions.join(' and ')} region${usePlural ? 's' : ''}, ${severityText}`;
       }
 
       function formatText(text) {
