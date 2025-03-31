@@ -7,139 +7,100 @@
   <!-- Handsontable CSS & JS -->
   <link href="https://cdn.jsdelivr.net/npm/handsontable@13.1.0/dist/handsontable.full.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/handsontable@13.1.0/dist/handsontable.full.min.js"></script>
+  <!-- 報告生成器 JS -->
+  <script src="report-generator.js" defer></script>
   <style>
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      max-width: 800px;
+      max-width: 900px;
       margin: 20px auto;
-      padding: 20px;
-      background: #f5f5f5;
+      background-color: #f7f9fc;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
-    .delete-btn {
-        background: none;
-        border: none;
-        color: #ff4444;
-        cursor: pointer;
-        padding: 8px;
-        font-size: 16px;
-        line-height: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .delete-btn:hover {
-        background: #ffeeee;
-        border-radius: 4px;
-    }
-
+    
     .container {
       display: grid;
       grid-template-columns: 2fr 1fr;
-      gap: 20px;
+      gap: 24px;
       background: white;
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      padding: 24px;
+      border-radius: 10px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
     }
-
+    
     .input-section {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 12px;
     }
-
-    .header-row {
-      display: grid;
-      grid-template-columns: 3fr 1fr;
-      gap: 10px;
-      font-weight: bold;
-      padding: 10px 0;
-      border-bottom: 1px solid #eee;
+    
+    #hot-container {
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: 0 1px 6px rgba(0, 0, 0, 0.05);
     }
-
-    .input-row {
-        display: grid;
-        grid-template-columns: auto 3fr 1fr;
-        gap: 10px;
-        margin-bottom: 5px;
-        align-items: center;
+    
+    .checkbox-section {
+      display: flex;
+      gap: 1.5rem;
+      margin-bottom: 1.2rem;
     }
-
-    .search-container {
-      position: relative;
-    }
-
-    .dropdown-item.selected {
-        background-color: #e6f3ff;
-    }
-
-    .search-input,
-    select {
-      width: 100%;
-      padding: 8px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      background: white;
+    
+    .checkbox-section label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
       font-size: 14px;
+      font-weight: 500;
     }
-
-    .dropdown {
-      position: absolute;
-      top: 100%;
-      left: 0;
-      width: 100%;
-      max-height: 200px;
-      overflow-y: auto;
-      background: white;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      z-index: 1000;
-      display: none;
+    
+    .checkbox-section input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
     }
-
-    .dropdown-item {
-      padding: 8px;
-      cursor: pointer;
-    }
-
-    .dropdown-item:hover {
-      background: #f5f5f5;
-    }
-
-    select {
-      height: 35px;
-      -webkit-appearance: menulist;
-      appearance: menulist;
-    }
-
-    .sidebar {
+    
+    .textarea-section {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 0.8rem;
+      margin-bottom: 1.2rem;
     }
-
-    button {
+    
+    .textarea-section h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin: 0.5rem 0 0 0;
+      color: #333;
+    }
+    
+    .textarea-section textarea {
+      width: 100%;
+      height: 150px;
       padding: 12px;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      resize: vertical;
+      font-family: inherit;
+      font-size: 14px;
+      line-height: 1.6;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+    }
+    
+    button {
+      padding: 12px 16px;
       border: none;
-      border-radius: 4px;
-      background: #5cb85c;
+      border-radius: 6px;
+      background: #4CAF50;
       color: white;
       cursor: pointer;
       font-size: 14px;
+      font-weight: 500;
+      transition: background 0.2s ease;
     }
-
+    
     button:hover {
-      background: #4cae4c;
+      background: #3e8e41;
     }
-
-    .reminder {
-      margin-top: 10px;
-      color: #666;
-      font-size: 14px;
-    }
-
+    
     .notification {
       position: fixed;
       bottom: 20px;
@@ -147,8 +108,19 @@
       padding: 12px 20px;
       background: rgba(0, 0, 0, 0.8);
       color: white;
-      border-radius: 4px;
+      border-radius: 6px;
       display: none;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+    }
+    
+    /* 發送數據按鈕樣式 */
+    .send-data-btn {
+      margin-left: 10px;
+      background-color: #4CAF50;
+    }
+    
+    .send-data-btn:hover {
+      background-color: #3e8e41;
     }
   </style>
 </head>
@@ -156,286 +128,156 @@
 <body>
   <div class="container">
     <div class="input-section">
-      <div class="header-row">
-        <div>Location</div>
-        <div>Severity</div>
-      </div>
       <div id="hot-container" style="height: 300px; overflow: hidden; margin-bottom: 20px;"></div>
       <div id="input-grid" style="display: none;"></div>
       <div id="atrophy-checkboxes"></div>
     </div>
     <div class="sidebar">
-      <button onclick="copyReport('findings')">Copy Findings</button>
-      <button onclick="copyReport('impression')">Copy Impression</button>
-      <button onclick="copyReport('alz')">Copy Impression (ALZ)</button>
-      <button onclick="copyReport('dlb')">Copy Impression (DLB)</button>
+      <div class="checkbox-section">
+        <label><input type="checkbox" id="alz-checkbox">ALZ</label>
+        <label><input type="checkbox" id="dlb-checkbox">DLB</label>
+      </div>
+      <div class="textarea-section">
+        <h3>Findings</h3>
+        <textarea id="findings-area" readonly></textarea>
+        <h3>Impression</h3>
+        <textarea id="impression-area" readonly></textarea>
+      </div>
       <button onclick="clearTable()">Clear</button>
+      <button id="sendDataBtn" onclick="sendReportData()" class="send-data-btn">Send report data</button>
     </div>
   </div>
   <div id="notification" class="notification"></div>
 
-  <?html>
-  <div id="perfusion-table-container" class="w-full p-2">
-    <style>
-      .perfusion-table {
-        width: 100%;
-        max-width: 900px; /* Limit maximum width */
-        border-collapse: collapse;
-        margin-top: 0.75rem;
-        font-size: 0.75rem; /* Smaller base font size */
-      }
-      .perfusion-table th,
-      .perfusion-table td {
-        border: 1px solid #e5e7eb;
-        padding: 0.25rem 0.375rem; /* Reduced padding */
-        text-align: center;
-      }
-      .perfusion-table th {
-        background-color: #f3f4f6;
-        font-size: 0.75rem; /* Smaller header font */
-        white-space: nowrap; /* Prevent header wrapping */
-      }
-      .perfusion-table td:first-child {
-        font-weight: 500;
-        background-color: #f9fafb;
-        text-align: left;
-        font-size: 0.75rem; /* Smaller disease names */
-      }
-      .toggle-button {
-        background-color: #4cae4c;
-        border: 1px solid #e5e7eb;
-        padding: 0.375rem 0.75rem; /* Smaller button padding */
-        border-radius: 0.375rem;
-        cursor: pointer;
-        font-size: 0.75rem; /* Smaller button text */
-        transition: all 0.2s;
-      }
-      .toggle-button:hover {
-        background-color: #f3f4f6;
-      }
-      .legend {
-        margin-top: 0.75rem;
-        font-size: 0.75rem; /* Smaller legend text */
-      }
-      .legend ul {
-        list-style-type: disc;
-        padding-left: 1.25rem;
-        margin-top: 0.375rem;
-      }
-      .header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 0.75rem;
-      }
-      #perfusion-table-container {
-        margin: 0 auto; /* Center the container */
-      }
-    </style>
-
-    <div class="header">
-      <h2 style="font-size: 1rem; font-weight: 600;">Brain Perfusion Changes in Neurodegenerative Diseases</h2>
-      <button id="toggleButton" class="toggle-button">Show Marked Findings Only</button>
-    </div>
-    <div id="tableContainer"></div>
-
-    <script>
-      const data = {
-        all: {
-          diseases: [
-            'Alzheimer\'s Disease (AD)',
-            'Dementia with Lewy Bodies (DLB)',
-            'Frontotemporal Dementia (FTD)', 
-            'Parkinson\'s Disease (PD)',
-            'Vascular Parkinsonism (VP)',
-            'Cortical Cerebellar Atrophy (CCA)',
-            'Multiple System Atrophy-C (MSA-C)',
-            'Amyotrophic Lateral Sclerosis (ALS)'
-          ],
-          regions: [
-            'Frontal Cortex',
-            'Central Sulcus',
-            'Parietal Cortex',
-            'Temporal Cortex', 
-            'Insula',
-            'Occipital Cortex',
-            'Precuneus',
-            'Post. Cingulate', // Shortened name
-            'Cingulate',
-            'Basal Ganglia',
-            'Thalamus',
-            'Cerebellum',
-            'Pons'
-          ],
-          findings: {
-            'Alzheimer\'s Disease (AD)': {
-              'Parietal Cortex': '↓',
-              'Precuneus': '↓↓',
-              'Post. Cingulate': '↓↓'
-            },
-            'Dementia with Lewy Bodies (DLB)': {
-              'Frontal Cortex': '↓',
-              'Parietal Cortex': '↓',
-              'Occipital Cortex': '↓↓',
-              'Precuneus': '↓↓',
-              'Post. Cingulate': '↓',
-              'Cingulate': '↓'
-            },
-            'Frontotemporal Dementia (FTD)': {
-              'Frontal Cortex': '↓*',
-              'Temporal Cortex': '↓',
-              'Insula': '↓'
-            },
-            'Parkinson\'s Disease (PD)': {
-              'Occipital Cortex': '↓',
-              'Precuneus': '↓',
-              'Basal Ganglia': '↑↑',
-              'Thalamus': '↑↑',
-              'Cerebellum': '↑↑'
-            },
-            'Vascular Parkinsonism (VP)': {
-              'Frontal Cortex': '↓',
-              'Parietal Cortex': '↓',
-              'Temporal Cortex': '↓',
-              'Insula': '↓',
-              'Cingulate': '↓↓',
-              'Basal Ganglia': '↓↓',
-              'Thalamus': '↓↓'
-            },
-            'Cortical Cerebellar Atrophy (CCA)': {
-              'Frontal Cortex': '↓?',
-              'Cerebellum': '↓'
-            },
-            'Multiple System Atrophy-C (MSA-C)': {
-              'Frontal Cortex': '↓?',
-              'Cerebellum': '↓↓',
-              'Pons': '↓↓'
-            },
-            'Amyotrophic Lateral Sclerosis (ALS)': {
-              'Frontal Cortex': '↓',
-              'Central Sulcus': '↓↓',
-              'Parietal Cortex': '↓'
-            }
-          }
-        },
-        marked: {
-          diseases: [
-            'Alzheimer\'s Disease (AD)',
-            'Dementia with Lewy Bodies (DLB)',
-            'Vascular Parkinsonism (VP)',
-            'Parkinson\'s Disease (PD)',
-            'Multiple System Atrophy-C (MSA-C)'
-          ],
-          regions: [
-            'Occipital Cortex',
-            'Precuneus',
-            'Post. Cingulate',
-            'Cingulate',
-            'Basal Ganglia',
-            'Thalamus',
-            'Cerebellum',
-            'Pons'
-          ],
-          findings: {
-            'Alzheimer\'s Disease (AD)': {
-              'Precuneus': '↓↓',
-              'Post. Cingulate': '↓↓'
-            },
-            'Dementia with Lewy Bodies (DLB)': {
-              'Occipital Cortex': '↓↓',
-              'Precuneus': '↓↓'
-            },
-            'Vascular Parkinsonism (VP)': {
-              'Cingulate': '↓↓',
-              'Basal Ganglia': '↓↓',
-              'Thalamus': '↓↓'
-            },
-            'Parkinson\'s Disease (PD)': {
-              'Basal Ganglia': '↑↑',
-              'Thalamus': '↑↑',
-              'Cerebellum': '↑↑'
-            },
-            'Multiple System Atrophy-C (MSA-C)': {
-              'Cerebellum': '↓↓',
-              'Pons': '↓↓'
-            }
-          }
-        }
-      };
-
-      function renderTable(showMarkedOnly) {
-        const currentData = showMarkedOnly ? data.marked : data.all;
-        let html = `
-          <div style="max-width: 900px; margin: 0 auto; overflow-x: auto;">
-            <table class="perfusion-table">
-              <thead>
-                <tr>
-                  <th>Disease / Region</th>
-                  ${currentData.regions.map(region => `<th>${region}</th>`).join('')}
-                </tr>
-              </thead>
-              <tbody>
-                ${currentData.diseases.map(disease => `
-                  <tr>
-                    <td>${disease}</td>
-                    ${currentData.regions.map(region => `
-                      <td>${currentData.findings[disease]?.[region] || '–'}</td>
-                    `).join('')}
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-          <div class="legend">
-            <p style="font-weight: 500;">Legend:</p>
-            <ul>
-              ${!showMarkedOnly ? `
-                <li>↓: Decreased perfusion</li>
-                <li>↓?: Questionable decrease</li>
-                <li>↓*: Asymmetric decrease</li>
-              ` : ''}
-              <li>↓↓: Markedly decreased perfusion</li>
-              <li>↑↑: Markedly increased perfusion</li>
-              <li>–: No ${showMarkedOnly ? 'marked' : 'significant'} change reported</li>
-            </ul>
-            ${showMarkedOnly ? `
-              <p style="margin-top: 0.5rem; color: #666;">
-                Note: Only marked changes (↓↓ or ↑↑) are shown. Minor changes are omitted for clarity.
-              </p>
-            ` : ''}
-          </div>
-        `;
-        document.getElementById('tableContainer').innerHTML = html;
-      }
-
-      let showMarkedOnly = false;
-      renderTable(showMarkedOnly);
-
-      document.getElementById('toggleButton').addEventListener('click', () => {
-        showMarkedOnly = !showMarkedOnly;
-        document.getElementById('toggleButton').textContent = 
-          showMarkedOnly ? 'Show All Findings' : 'Show Marked Findings Only';
-        renderTable(showMarkedOnly);
-      });
-    </script>
-  </div>
-
-  <div style="margin-top: 40px; font-size: 12px;">
-    <p><strong>References:</strong></p>
-    <ol>
-      <li>Waragai M, Yamada T, Matsuda H. <a href="https://pubmed.ncbi.nlm.nih.gov/17493637/" target="_blank">Evaluation of brain perfusion SPECT using an easy Z-score imaging system (eZIS) as an adjunct to early-diagnosis of neurodegenerative diseases.</a> J Neurol Sci. 2007 Sep 15;260(1-2):57-64. doi: 10.1016/j.jns.2007.03.027. Epub 2007 May 9. PMID: 17493637.</li>
-      <li>Matsuda H. <a href="https://pubmed.ncbi.nlm.nih.gov/17631544/" target="_blank">Role of neuroimaging in Alzheimer's disease, with emphasis on brain perfusion SPECT.</a> J Nucl Med. 2007 Aug;48(8):1289-300. doi: 10.2967/jnumed.106.037218. Epub 2007 Jul 13. PMID: 17631544.</li>
-    </ol>
-  </div>
-
-
+  <style>
+    /* 優化整體排版 */
+    body {
+      max-width: 900px;
+      margin: 20px auto;
+      background-color: #f7f9fc;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    
+    .container {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 24px;
+      background: white;
+      padding: 24px;
+      border-radius: 10px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+    }
+    
+    .input-section {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    #hot-container {
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: 0 1px 6px rgba(0, 0, 0, 0.05);
+    }
+    
+    .checkbox-section {
+      display: flex;
+      gap: 1.5rem;
+      margin-bottom: 1.2rem;
+    }
+    
+    .checkbox-section label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    .checkbox-section input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+    }
+    
+    .textarea-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.8rem;
+      margin-bottom: 1.2rem;
+    }
+    
+    .textarea-section h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin: 0.5rem 0 0 0;
+      color: #333;
+    }
+    
+    .textarea-section textarea {
+      width: 100%;
+      height: 150px;
+      padding: 12px;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      resize: vertical;
+      font-family: inherit;
+      font-size: 14px;
+      line-height: 1.6;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+    }
+    
+    button {
+      padding: 12px 16px;
+      border: none;
+      border-radius: 6px;
+      background: #4CAF50;
+      color: white;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: background 0.2s ease;
+    }
+    
+    button:hover {
+      background: #3e8e41;
+    }
+    
+    .notification {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 12px 20px;
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      border-radius: 6px;
+      display: none;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+    }
+  </style>
 </body>
+
 <script>
-  // 確保在頁面加載完成後執行初始化
   document.addEventListener('DOMContentLoaded', function() {
       initLocationMap();  // 初始化位置映射
       initHandsontable();  // 初始化 Handsontable
       initAtrophyCheckboxes(); // 初始化萎縮相關複選框
+      
+      // 將全局變數導出給報告生成器使用
+      window.appConstants = {
+        BILATERAL_ONLY_AREAS,
+        LOCATIONS,
+        SIDES,
+        hot
+      };
+      
+      // 確保在所有初始化完成後立即執行報告生成
+      // requestAnimationFrame確保在下一幀渲染前執行，確保DOM已完全更新
+      requestAnimationFrame(() => {
+          if (typeof updateReportAreas === 'function') {
+              console.log("初始載入完畢，執行updateReportAreas");
+              updateReportAreas();
+          }
+      });
   });
   
   // Constants
@@ -922,615 +764,6 @@ const AREAS = [
       });
   }
 
-  function createSearchableInput(row) {
-      function findMatches(searchTerm, locations) {
-          const searchWords = searchTerm.toLowerCase()
-              .split(' ')
-              .filter(word => word.length > 0);
-
-          if (searchWords.length === 0) {
-              return locations;
-          }
-
-          return locations.filter(location => {
-              const locationLower = location.toLowerCase();
-              return searchWords.every(word => locationLower.includes(word));
-          });
-      }
-
-      const container = document.createElement('div');
-      container.className = 'search-container';
-
-      const input = document.createElement('input');
-      input.className = 'search-input';
-      input.placeholder = 'Type to search...';
-
-      const dropdown = document.createElement('div');
-      dropdown.className = 'dropdown';
-
-      let selectedIndex = -1;
-      let currentMatches = [];
-
-      const formatDisplayLocation = (location) => {
-          if (location.includes('basal ganglia') && 
-              (location.startsWith('left ') || location.startsWith('right '))) {
-              return location.replace('basal ganglia', 'basal ganglion');
-          }
-          return location;
-      };
-
-      const selectItem = (index) => {
-          const items = dropdown.querySelectorAll('.dropdown-item');
-          
-          items.forEach(item => item.classList.remove('selected'));
-          
-          if (index >= 0 && index < items.length) {
-              selectedIndex = index;
-              const selectedItem = items[index];
-              selectedItem.classList.add('selected');
-              selectedItem.scrollIntoView({ block: 'nearest' });
-          }
-      };
-
-      input.addEventListener('keydown', (e) => {
-          const items = dropdown.querySelectorAll('.dropdown-item');
-          
-          switch(e.key) {
-              case 'ArrowDown':
-                  e.preventDefault();
-                  selectItem((selectedIndex + 1) % items.length);
-                  break;
-              case 'ArrowUp':
-                  e.preventDefault();
-                  selectItem(selectedIndex <= 0 ? items.length - 1 : selectedIndex - 1);
-                  break;
-              case 'Enter':
-                  e.preventDefault();
-                  if (selectedIndex >= 0 && selectedIndex < items.length) {
-                      const selectedItem = items[selectedIndex];
-                      input.value = selectedItem.textContent;
-                      dropdown.style.display = 'none';
-                      
-                      const select = row.querySelector('select');
-                      select.value = 'moderate';
-                      locationStatusMap.set(currentMatches[selectedIndex], 'moderate');
-                      
-                      setTimeout(() => {
-                          checkAndAddNewRow(true);
-                      }, 0);
-                  }
-                  break;
-              case 'Escape':
-                  dropdown.style.display = 'none';
-                  input.blur();
-                  break;
-          }
-      });
-
-      input.addEventListener('input', () => {
-          const searchTerm = input.value.toLowerCase();
-          currentMatches = findMatches(searchTerm, LOCATIONS).filter(loc => {
-              const currentSeverity = locationStatusMap.get(loc);
-              return !currentSeverity;
-          });
-
-          dropdown.innerHTML = '';
-          selectedIndex = -1;
-
-          currentMatches.forEach((match, index) => {
-              const item = document.createElement('div');
-              item.className = 'dropdown-item';
-              item.textContent = formatDisplayLocation(match);
-              
-              item.addEventListener('click', () => {
-                  input.value = formatDisplayLocation(match);
-                  dropdown.style.display = 'none';
-                  
-                  const select = row.querySelector('select');
-                  select.value = 'moderate';
-                  locationStatusMap.set(match, 'moderate');
-                  
-                  setTimeout(() => {
-                      checkAndAddNewRow(true);
-                  }, 0);
-              });
-
-              item.addEventListener('mouseover', () => {
-                  selectItem(index);
-              });
-
-              dropdown.appendChild(item);
-          });
-
-          dropdown.style.display = currentMatches.length ? 'block' : 'none';
-      });
-
-      input.addEventListener('focus', () => {
-          const event = new Event('input');
-          input.dispatchEvent(event);
-      });
-
-      document.addEventListener('click', (e) => {
-          if (!container.contains(e.target)) {
-              dropdown.style.display = 'none';
-          }
-      });
-
-      container.appendChild(input);
-      container.appendChild(dropdown);
-      return container;
-  }
-
-
-  function createSelect(options) {
-      const select = document.createElement('select');
-      options.forEach(option => {
-          const opt = document.createElement('option');
-          opt.value = option;
-          opt.textContent = option;
-          select.appendChild(opt);
-      });
-      
-      select.addEventListener('change', (e) => {
-          const row = e.target.closest('.input-row');
-          const input = row.querySelector('.search-input');
-          if (input.value) {
-              locationStatusMap.set(input.value, e.target.value);
-          }
-          checkAndAddNewRow();
-      });
-      
-      return select;
-  }
-
-  // 在 script 标签中找到原来的 createRow 函数并替换
-  function createRow() {
-      const row = document.createElement('div');
-      row.className = 'input-row';
-      
-      // 创建删除按钮
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'delete-btn';
-      deleteBtn.innerHTML = '×';
-      deleteBtn.title = 'Delete row';
-      deleteBtn.onclick = (e) => {
-          e.preventDefault();
-          const thisRow = e.target.closest('.input-row');
-          const input = thisRow.querySelector('.search-input');
-          
-          // 如果这行有数据，从 locationStatusMap 中删除
-          if (input.value) {
-              locationStatusMap.delete(input.value);
-          }
-          
-          // 删除行
-          thisRow.remove();
-          
-          // 如果删除后没有空行，添加一个新行
-          checkAndAddNewRow();
-      };
-      
-      const searchableInput = createSearchableInput(row);
-      const severitySelect = createSelect(SEVERITIES);
-      
-      row.appendChild(deleteBtn);
-      row.appendChild(searchableInput);
-      row.appendChild(severitySelect);
-      
-      severitySelect.value = '';
-      
-      return row;
-  }
-
-  function checkAndAddNewRow(shouldFocus = false) {
-      const rows = document.querySelectorAll('.input-row');
-      const lastRow = rows[rows.length - 1];
-      
-      if (!lastRow) {
-          const newRow = createRow();
-          document.getElementById('input-grid').appendChild(newRow);
-          if (shouldFocus) {
-              setTimeout(() => {
-                  const input = newRow.querySelector('.search-input');
-                  input.focus();
-              }, 0);
-          }
-          return;
-      }
-
-      const input = lastRow.querySelector('.search-input');
-      const select = lastRow.querySelector('select');
-      
-      if (input.value.trim() !== '') {
-          locationStatusMap.set(input.value, select.value);
-          const newRow = createRow();
-          document.getElementById('input-grid').appendChild(newRow);
-          if (shouldFocus) {
-              setTimeout(() => {
-                  const input = newRow.querySelector('.search-input');
-                  input.focus();
-              }, 0);
-          }
-      }
-  }
-
-
-  function collectDataFromRows() {
-      const currentData = [];
-      
-      // 從 Handsontable 收集數據
-      for (let i = 0; i < hot.countRows(); i++) {
-          const location = hot.getDataAtCell(i, 0);
-          const severity = hot.getDataAtCell(i, 1);
-          
-          if (location && severity) {
-              let side = '';
-              let area = location;
-              
-              // 處理位置和側面信息
-              if (!BILATERAL_ONLY_AREAS.includes(location)) {
-                  SIDES.forEach(s => {
-                      if (location.startsWith(s + ' ')) {
-                          side = s;
-                          area = location.substring(s.length + 1);
-                      }
-                  });
-              }
-
-              currentData.push({
-                  side: side,
-                  area: area,
-                  severity: severity,
-                  fullLocation: location
-              });
-          }
-      }
-      
-      return currentData;
-  }
-  function getTableData() {
-      const data = [];
-      for (const [location, severity] of locationStatusMap) {
-          if (severity) {
-              let side = '';
-              let area = location;
-              
-              if (!BILATERAL_ONLY_AREAS.includes(location)) {
-                  SIDES.forEach(s => {
-                      if (location.startsWith(s + ' ')) {
-                          side = s;
-                          area = location.substring(s.length + 1);
-                      }
-                  });
-              }
-
-              data.push({
-                  side: side,
-                  area: area,
-                  severity: severity,
-                  fullLocation: location
-              });
-          }
-      }
-      return data;
-  }
-
-  // 在 script 标签中找到原来的 formatRegions 函数并替换
-  function formatRegions(regions, desc) {
-      if (regions.length === 0) return '';
-      
-      // 创建一个映射来存储完整位置及其在原始数组中的索引
-      const locationOrder = new Map();
-      LOCATIONS.forEach((loc, index) => {
-          locationOrder.set(loc, index);
-      });
-      
-      // 按照原始数组的顺序排序区域
-      const sortedRegions = [...regions].sort((a, b) => {
-          const aFullLoc = a.side ? `${a.side} ${a.area}` : a.area;
-          const bFullLoc = b.side ? `${b.side} ${b.area}` : b.area;
-          return locationOrder.get(aFullLoc) - locationOrder.get(bFullLoc);
-      });
-      
-      const locDescriptions = sortedRegions.map(r => {
-          if (BILATERAL_ONLY_AREAS.includes(r.area)) {
-              return r.area;
-          } else {
-              const sidePrefix = r.side ? `${r.side} ` : '';
-              // 处理 basal ganglia/ganglion 的特殊情况
-              let area = r.area;
-              if (area === 'basal ganglia' && r.side && r.side !== 'bilateral') {
-                  area = 'basal ganglion';  // 单侧时使用单数形式
-              }
-              return `${sidePrefix}${area}`;
-          }
-      });
-      
-      if (locDescriptions.length === 1) {
-          // 如果只有一個區域，但它是雙側的，使用複數形式
-          const isBilateral = sortedRegions[0].side === 'bilateral';
-          return `${desc} in the ${locDescriptions[0]} ${isBilateral ? 'regions' : 'region'}`;
-      }
-      if (locDescriptions.length === 2) {
-          return `${desc} in the ${locDescriptions[0]} and ${locDescriptions[1]} regions`;
-      }
-      return `${desc} in the ${locDescriptions.slice(0, -1).join(', ')}, and ${locDescriptions[locDescriptions.length - 1]} regions`;
-  }
-
-  function createHypoperfusionText(regions, message) {
-      if (regions.length === 0) return '';
-      
-      // 檢查是否應該使用複數形式
-      const usePlural = regions.length > 1 || regions.some(region => region.includes('bilateral'));
-      
-      const regionText = regions.join(", ") + " region" + (usePlural ? "s" : "");
-      return "Hypoperfusion in the " + regionText + " " + message;
-  }
-
-  function capitalizeFirstLetter(string) {
-      return string.charAt(0).toUpperCase() + string.slice(1);
-  }
-
-
-  function pluralizeRegions(text) {
-    // Helper function to process a single part
-    function processRegionText(part) {
-      if (part.trim().endsWith('region')) {
-        if (part.includes(' and ') || part.includes('bilateral')) {
-          return part.replace(/region$/, 'regions');
-        }
-      }
-      return part;
-    }
-
-    // First split by semicolons
-    let semicolonParts = text.split(';');
-    
-    // Process each semicolon-separated part, which might contain periods
-    return semicolonParts.map(semicolonPart => {
-      // Split each semicolon part by periods
-      let periodParts = semicolonPart.split('.');
-      
-      // Process each period-separated part
-      return periodParts.map(periodPart => {
-        return processRegionText(periodPart.trim());
-      }).join('.');  // Rejoin with periods
-    }).join(';');  // Rejoin with semicolons
-  }
-
-  function processReportText(text) {
-    if (!text) return text;
-    
-    // If there are no semicolons or periods, process the whole text
-    if (!text.includes(';') && !text.includes('.')) {
-      if (text.endsWith('region') && 
-          (text.includes(' and ') || text.includes('bilateral'))) {
-        return text.replace(/region$/, 'regions');
-      }
-      return text;
-    }
-    
-    // Process text with pluralization
-    return pluralizeRegions(text);
-  }
-  
-  function generateReports() {
-      const data = collectDataFromRows();
-      const atrophyFindings = window.atrophyFindings || {
-          fissures: false,
-          ventricles: false,
-          sulci: false,
-          interhemisphericFissures: false
-      };
-
-      function generateAtrophyText() {
-          const findings = [];
-          if (atrophyFindings.fissures) findings.push("cerebral fissures");
-          if (atrophyFindings.ventricles) findings.push("ventricles");
-          if (atrophyFindings.sulci) findings.push("cerebral sulci");
-          if (atrophyFindings.interhemisphericFissures) findings.push("interhemispheric fissures");
-          
-          if (findings.length === 0) return "";
-          if (findings.length === 1) return `Prominent ${findings[0]} are seen.`;
-          if (findings.length === 2) return `Prominent ${findings[0]} and ${findings[1]} are seen.`;
-          const last = findings.pop();
-          return `Prominent ${findings.join(', ')}, and ${last} are seen.`;
-      }
-
-      function formatCerebellarDiaschisisText(data, severity) {
-          const cerebellarRegions = [];
-          data.forEach(item => {
-              if (item.area.includes('cerebellar')) {
-                  cerebellarRegions.push(item.fullLocation);
-              }
-          });
-          
-          if (cerebellarRegions.length === 0) return '';
-          
-          let severityText = '';
-          switch(severity) {
-              case 'marked':
-              case 'moderate':
-                  severityText = 'suspect cross cerebellar diaschisis';
-                  break;
-              case 'mild':
-                  severityText = 'possible cross cerebellar diaschisis';
-                  break;
-              case 'slight':
-                  severityText = 'cross cerebellar diaschisis cannot be excluded completely';
-                  break;
-          }
-          
-          // 檢查是否應該使用複數形式（如果有多個區域或包含雙側區域）
-          const usePlural = cerebellarRegions.length > 1 || cerebellarRegions.some(region => region.includes('bilateral'));
-          
-          return `Hypoperfusion in the ${cerebellarRegions.join(' and ')} region${usePlural ? 's' : ''}, ${severityText}`;
-      }
-
-      function formatText(text) {
-          text = text.charAt(0).toUpperCase() + text.slice(1);
-          return text
-              .replace(/\s+/g, ' ')
-              .replace(/\.+/g, '.')
-              .replace(/\.\s*\./g, '.')
-              .replace(/\./g, '. ')
-              .trim()
-              .replace(/\s*\.$/, '.')
-              .replace(/\s\s/g, ' ');
-      }
-
-      function formatNumberedText(impressionArray) {
-          if (impressionArray.length === 0) return '';
-          if (impressionArray.length === 1) return formatText(impressionArray[0]);
-          
-          let result = '';
-          for (let i = 0; i < impressionArray.length; i++) {
-              let text = formatText(impressionArray[i]);
-              // 確保每個項目都以句點結尾
-              if (!text.endsWith('.')) {
-                  text += '.';
-              }
-              result += `\n${i + 1}. ${text}`;
-          }
-          return result;
-      }
-
-      // Generate findings text
-      const regAlz = ["posterior cingulate", "posterior parietal", "precuneus"];
-      const regDlb = ["occipital"];
-
-      const valMar = data.filter(x => x.severity === 'marked');
-      const valMod = data.filter(x => x.severity === 'moderate');
-      const valMil = data.filter(x => x.severity === 'mild');
-      const valSli = data.filter(x => x.severity === 'slight');
-      const atrophyText = generateAtrophyText();
-
-      const txtMar = formatRegions(valMar, 'markedly decreased radioactivity');
-      const txtMod = formatRegions(valMod, 'decreased radioactivity');
-      const txtMil = formatRegions(valMil, 'mildly decreased radioactivity');
-      const txtSli = formatRegions(valSli, 'slightly decreased radioactivity');
-
-      let txtFnd = valMar.concat(valMod, valMil, valSli).length === 0 ? 
-          'Tc-99m ECD brain perfusion scan with SPECT shows no definite abnormal radioactivity in the brain.' :
-          'Tc-99m ECD brain perfusion scan with SPECT shows ' + [txtMar, txtMod, txtMil, txtSli].filter(x => x !== '').join("; ") + ". ";
-
-      if (atrophyText) {
-          txtFnd = txtFnd + (txtFnd.endsWith('  ') ? '' : txtFnd.endsWith(' ') ? '' : ' ') + atrophyText;
-      }
-
-      // Generate impression text
-      let baseImpressions = [];
-
-      if (window.cerebellarDiaschisis) {
-          const nonCerebellarData = data.filter(item => !item.area.includes('cerebellar'));
-          const cerebellarData = data.filter(item => item.area.includes('cerebellar'));
-
-          // Generate main impression text without cerebellar regions
-          const valMarNonCereb = nonCerebellarData.filter(x => x.severity === 'marked');
-          const valModNonCereb = nonCerebellarData.filter(x => x.severity === 'moderate');
-          const valMilNonCereb = nonCerebellarData.filter(x => x.severity === 'mild');
-          const valSliNonCereb = nonCerebellarData.filter(x => x.severity === 'slight');
-
-          const txtMarNonCereb = formatRegions(valMarNonCereb, 'marked hypoperfusion');
-          const txtModNonCereb = formatRegions(valModNonCereb, 'hypoperfusion');
-          const txtMilNonCereb = formatRegions(valMilNonCereb, 'mild hypoperfusion');
-          const txtSliNonCereb = formatRegions(valSliNonCereb, 'suspicious hypoperfusion');
-
-          let mainText = [txtMarNonCereb, txtModNonCereb, txtMilNonCereb, txtSliNonCereb]
-              .filter(x => x !== '')
-              .join('; ');
-
-          if (nonCerebellarData.length > 0) {
-              // 確保文字以句點結尾
-              baseImpressions.push(ensurePeriodEnding(mainText));
-          }
-
-          if (cerebellarData.length > 0) {
-              const maxSeverity = cerebellarData.reduce((max, item) => {
-                  const severityOrder = { marked: 4, moderate: 3, mild: 2, slight: 1 };
-                  return severityOrder[item.severity] > severityOrder[max] ? item.severity : max;
-              }, 'slight');
-
-              const diaschisisText = formatCerebellarDiaschisisText(cerebellarData, maxSeverity);
-              if (diaschisisText) {
-                  baseImpressions.push(ensurePeriodEnding(diaschisisText));
-              }
-          }
-      } else {
-          const mainImp = valMar.concat(valMod, valMil, valSli).length === 0 ?
-              'No definite abnormal cerebral perfusion is detected.' :
-              txtFnd.replace('Tc-99m ECD brain perfusion scan with SPECT shows ', '')
-                  .replace('markedly decreased radioactivity', 'marked hypoperfusion')
-                  .replace('decreased radioactivity', 'hypoperfusion')
-                  .replace('mildly decreased radioactivity', 'mild hypoperfusion')
-                  .replace('slightly decreased radioactivity', 'suspicious hypoperfusion')
-                  .replace(/\.\s*Prominent.*?are seen\./, '');
-          
-          baseImpressions.push(ensurePeriodEnding(mainImp));
-      }
-
-      if (baseImpressions.length === 0) {
-          baseImpressions.push('No definite abnormal cerebral perfusion is detected.');
-      }
-
-      // Generate ALZ and DLB specific texts
-      let posAlz = regAlz.filter(x => data.some(d => d.area === x));
-      let posDlb = regDlb.filter(x => data.some(d => d.area === x));
-
-      let txtAlz = createHypoperfusionText(posAlz, "has been reported to be commonly observed in patients with Alzheimer's disease.");
-      let txtDlb = createHypoperfusionText(posDlb, "is considered a supportive biomarker of dementia with Lewy bodies.");
-
-      let txtAlzCor = posDlb.length > 0 ? 
-          `${posAlz.length > 0 ? "However" : "Besides"}, hypoperfusion in the occipital area is usually not observed in Alzheimer's disease. Clinical correlation is recommended.` : "";
-      let txtDlbCor = posAlz.length > 0 ? "Clinical correlation is recommended." : "";
-
-      txtAlz = txtAlz || "There is no apparently decreased perfusion in the parietal association areas, posterior cingulate, precuneus, which are the regions commonly affected in Alzheimer's disease.";
-      txtDlb = txtDlb || "There is no definite evidence of occipital hypoperfusion, a supportive biomarker of dementia with Lewy bodies, observed in this patient.";
-
-      if (txtAlzCor.length > 0) txtAlz = txtAlz + txtAlzCor;
-      if (txtDlbCor.length > 0) txtDlb = txtDlb + txtDlbCor;
-
-      // Create final impressions arrays
-      let impressions = [...baseImpressions];
-      
-      // For ALZ and DLB impressions, only add the supportive text to non-cerebellar findings
-      let alzImpressions = baseImpressions.map(imp => {
-          // If this is a cerebellar diaschisis impression, don't add ALZ text
-          if (imp.includes('cerebellar diaschisis')) {
-              return imp;
-          }
-          return imp + (imp.endsWith('.') ? '' : '.') + txtAlz;
-      });
-      
-      let dlbImpressions = baseImpressions.map(imp => {
-          // If this is a cerebellar diaschisis impression, don't add DLB text
-          if (imp.includes('cerebellar diaschisis')) {
-              return imp;
-          }
-          return imp + (imp.endsWith('.') ? '' : '.') + txtDlb;
-      });
-
-      // Add atrophy finding if present
-      if (atrophyText) {
-          // 檢查 ventricles 是否被選中
-          const atrophyDescription = atrophyFindings.ventricles 
-              ? "Suspect cerebral cortical atrophy with ventriculomegaly." 
-              : "Suspect cerebral cortical atrophy.";
-              
-          impressions.push(atrophyDescription);
-          alzImpressions.push(atrophyDescription);
-          dlbImpressions.push(atrophyDescription);
-      }
-
-      return {
-          findings: txtFnd,
-          impression: formatNumberedText(impressions),
-          alz: formatNumberedText(alzImpressions),
-          dlb: formatNumberedText(dlbImpressions)
-      };
-  }
-
-
   function clearTable() {
       // 清空 Handsontable
       hot.loadData([['', '']]);
@@ -1543,8 +776,41 @@ const AREAS = [
       // 刷新表格
       syncTableWithMap();
       
+      // 清除所有萎縮相關複選框
+      if (window.atrophyFindings) {
+          for (const key in window.atrophyFindings) {
+              window.atrophyFindings[key] = false;
+              const checkbox = document.getElementById(key);
+              if (checkbox) checkbox.checked = false;
+          }
+      }
+      
+      // 清除小腦交叉失活複選框
+      window.cerebellarDiaschisis = false;
+      
       // 額外觸發一次事件，確保 cerebellar diaschisis checkbox 更新
       document.dispatchEvent(new CustomEvent('locationStatusMapChanged'));
+
+      // 清空文本區域
+      if (document.getElementById('findings-area')) {
+          document.getElementById('findings-area').value = '';
+      }
+      if (document.getElementById('impression-area')) {
+          document.getElementById('impression-area').value = '';
+      }
+      
+      // 清除 ALZ/DLB 複選框選擇
+      if (document.getElementById('alz-checkbox')) {
+          document.getElementById('alz-checkbox').checked = false;
+      }
+      if (document.getElementById('dlb-checkbox')) {
+          document.getElementById('dlb-checkbox').checked = false;
+      }
+      
+      // 直接調用報告更新函數（如果存在）
+      if (typeof updateReportAreas === 'function') {
+          updateReportAreas();
+      }
       
       showNotification('Table cleared');
   }
@@ -1557,66 +823,7 @@ const AREAS = [
           notification.style.display = 'none';
       }, 2000);
   }
-
-  async function copyReport(type) {
-      try {
-          // Debug output
-          console.log('Starting copy process for type:', type);
-          
-          const reports = generateReports();
-          console.log('Generated reports:', reports);
-          
-          const text = reports[type];
-          console.log('Text to copy:', text);
-          
-          if (text === undefined || text === null) {
-              throw new Error('No text generated');
-          }
-
-          // Create and append textarea
-          const textArea = document.createElement('textarea');
-          textArea.value = text;
-          textArea.style.position = 'fixed';  // Make it invisible
-          textArea.style.opacity = '0';
-          document.body.appendChild(textArea);
-          
-          // Select and copy
-          textArea.focus();
-          textArea.select();
-          
-          try {
-              // Try modern clipboard API first
-              await navigator.clipboard.writeText(text);
-              console.log('Copied using Clipboard API');
-          } catch (clipError) {
-              console.log('Clipboard API failed:', clipError);
-              // Fallback to execCommand
-              const success = document.execCommand('copy');
-              console.log('execCommand result:', success);
-              if (!success) {
-                  throw new Error('execCommand failed');
-              }
-          }
-          
-          // Cleanup
-          document.body.removeChild(textArea);
-          showNotification('Copied to clipboard');
-          
-      } catch (err) {
-          console.error('Copy failed:', err);
-          console.error('Error stack:', err.stack);
-          showNotification(`Failed to copy: ${err.message}`);
-      }
-  }
-
-  // 處理所有文字，確保以句點結尾
-  function ensurePeriodEnding(text) {
-      if (text && !text.endsWith('.')) {
-          return text + '.';
-      }
-      return text;
-  }
-
+  
   // 初始化萎縮相關複選框和小腦交叉失活複選框
   function initAtrophyCheckboxes() {
     // 初始化全局變數
@@ -1669,6 +876,8 @@ const AREAS = [
       
       checkbox.addEventListener('change', (e) => {
         window.atrophyFindings[option.id] = e.target.checked;
+        // 觸發更新報告文本
+        document.dispatchEvent(new CustomEvent('locationStatusMapChanged'));
       });
       
       const span = document.createElement('span');
@@ -1704,6 +913,8 @@ const AREAS = [
     
     cerebCheckbox.addEventListener('change', (e) => {
       window.cerebellarDiaschisis = e.target.checked;
+      // 觸發更新報告文本
+      document.dispatchEvent(new CustomEvent('locationStatusMapChanged'));
     });
     
     const cerebSpan = document.createElement('span');
@@ -1742,5 +953,26 @@ const AREAS = [
     const checkboxesContainer = document.getElementById('atrophy-checkboxes');
     checkboxesContainer.appendChild(atrophyContainer);
     checkboxesContainer.appendChild(cerebContainer);
+  }
+
+  // 收集報告數據並發送給開啟窗口的函數
+  function sendReportData() {
+    // 收集報告數據
+    const reportData = {
+      Findings: document.getElementById('findings-area').value,
+      Impression: document.getElementById('impression-area').value
+    };
+
+    // 檢查是否有 window.opener
+    if (window.opener) {
+      // 發送數據給開啟窗口
+      window.opener.postMessage(reportData, '*');
+      
+      showNotification('Report data sent!');
+      console.log('Report data sent:', reportData);
+    } else {
+      console.error('No opener found, unable to send data');
+      showNotification('No opener found, unable to send data');
+    }
   }
 </script>
