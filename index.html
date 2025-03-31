@@ -3,8 +3,9 @@
 
 <head>
   <title>ECD Report Generator</title>
-  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <!-- Handsontable CSS & JS -->
   <link href="https://cdn.jsdelivr.net/npm/handsontable@13.1.0/dist/handsontable.full.min.css" rel="stylesheet">
@@ -776,18 +777,21 @@ const AREAS = [
                           super.finishEditing();
                           
                           // 在編輯完成後，設置默認的嚴重程度
-                          const row = this.hot.getSelectedRange().from.row;
-                          
-                          // 檢查當前行的嚴重程度是否為空
-                          const currentSeverity = this.hot.getDataAtCell(row, 1);
-                          if (!currentSeverity) {
-                              // 設置默認嚴重程度為 'moderate'
-                              this.hot.setDataAtCell(row, 1, 'moderate');
-                          }
-                          
-                          // 如果這是最後一行，確保添加新行
-                          if (row === this.hot.countRows() - 1) {
-                              syncTableWithMap();
+                          const selectedRange = this.hot.getSelectedRange();
+                          if (selectedRange && selectedRange.from) {
+                              const row = selectedRange.from.row;
+                              
+                              // 檢查當前行的嚴重程度是否為空
+                              const currentSeverity = this.hot.getDataAtCell(row, 1);
+                              if (!currentSeverity) {
+                                  // 設置默認嚴重程度為 'moderate'
+                                  this.hot.setDataAtCell(row, 1, 'moderate');
+                              }
+                              
+                              // 如果這是最後一行，確保添加新行
+                              if (row === this.hot.countRows() - 1) {
+                                  syncTableWithMap();
+                              }
                           }
                       } catch (e) {
                           console.error('Error in finishEditing:', e);
@@ -849,7 +853,10 @@ const AREAS = [
                       
                       // 立即設置默認嚴重程度為 'moderate'
                       // 在 finishEditing 之前記錄當前行
-                      this.selectedRow = this.hot.getSelectedRange().from.row;
+                      const selectedRange = this.hot.getSelectedRange();
+                      if (selectedRange && selectedRange.from) {
+                          this.selectedRow = selectedRange.from.row;
+                      }
                       
                       this.finishEditing();
                   });
@@ -1523,7 +1530,12 @@ const AREAS = [
           
           let result = '';
           for (let i = 0; i < impressionArray.length; i++) {
-              result += `\n${i + 1}. ${formatText(impressionArray[i])}`;
+              let text = formatText(impressionArray[i]);
+              // 確保每個項目都以句點結尾
+              if (!text.endsWith('.')) {
+                  text += '.';
+              }
+              result += `\n${i + 1}. ${text}`;
           }
           return result;
       }
@@ -1574,7 +1586,8 @@ const AREAS = [
               .join('; ');
 
           if (nonCerebellarData.length > 0) {
-              baseImpressions.push(mainText + '.');
+              // 確保文字以句點結尾
+              baseImpressions.push(ensurePeriodEnding(mainText));
           }
 
           if (cerebellarData.length > 0) {
@@ -1585,7 +1598,7 @@ const AREAS = [
 
               const diaschisisText = formatCerebellarDiaschisisText(cerebellarData, maxSeverity);
               if (diaschisisText) {
-                  baseImpressions.push(diaschisisText + '.');
+                  baseImpressions.push(ensurePeriodEnding(diaschisisText));
               }
           }
       } else {
@@ -1598,7 +1611,7 @@ const AREAS = [
                   .replace('slightly decreased radioactivity', 'suspicious hypoperfusion')
                   .replace(/\.\s*Prominent.*?are seen\./, '');
           
-          baseImpressions.push(mainImp);
+          baseImpressions.push(ensurePeriodEnding(mainImp));
       }
 
       if (baseImpressions.length === 0) {
@@ -1644,9 +1657,14 @@ const AREAS = [
 
       // Add atrophy finding if present
       if (atrophyText) {
-          impressions.push("Suspect cerebral atrophy.");
-          alzImpressions.push("Suspect cerebral atrophy.");
-          dlbImpressions.push("Suspect cerebral atrophy.");
+          // 檢查 ventricles 是否被選中
+          const atrophyDescription = atrophyFindings.ventricles 
+              ? "Suspect cerebral cortical atrophy with ventriculomegaly." 
+              : "Suspect cerebral cortical atrophy.";
+              
+          impressions.push(atrophyDescription);
+          alzImpressions.push(atrophyDescription);
+          dlbImpressions.push(atrophyDescription);
       }
 
       return {
@@ -1734,5 +1752,13 @@ const AREAS = [
           console.error('Error stack:', err.stack);
           showNotification(`Failed to copy: ${err.message}`);
       }
+  }
+
+  // 處理所有文字，確保以句點結尾
+  function ensurePeriodEnding(text) {
+      if (text && !text.endsWith('.')) {
+          return text + '.';
+      }
+      return text;
   }
 </script>
