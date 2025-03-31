@@ -365,7 +365,12 @@ function formatNumberedText(impressionArray) {
         if (!text.endsWith('.')) {
             text += '.';
         }
-        result += `\n${i + 1}. ${text}`;
+        // 第一項前不加換行符，其餘項目前添加換行符
+        if (i === 0) {
+            result += `${i + 1}. ${text}`;
+        } else {
+            result += `\n${i + 1}. ${text}`;
+        }
     }
     return result;
 }
