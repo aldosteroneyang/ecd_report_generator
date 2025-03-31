@@ -4,14 +4,9 @@
 <head>
   <title>ECD Report Generator</title>
   <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
-  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <!-- Handsontable CSS & JS -->
   <link href="https://cdn.jsdelivr.net/npm/handsontable@13.1.0/dist/handsontable.full.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/handsontable@13.1.0/dist/handsontable.full.min.js"></script>
-  <!-- 引入報告生成相關腳本 -->
-  <script type="module" src="report-generator.js"></script>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -435,207 +430,199 @@
 
 
 </body>
-<script type="module">
-  // 導入報告生成函數
-  import { 
-    collectDataFromRows,
-    formatRegions,
-    createHypoperfusionText,
-    capitalizeFirstLetter,
-    pluralizeRegions,
-    processReportText,
-    generateAtrophyText,
-    formatCerebellarDiaschisisText,
-    formatText,
-    formatNumberedText,
-    ensurePeriodEnding,
-    generateReports
-  } from './report-generator.js';
-
-  // 全局變量
-  let hot;
-  let locationStatusMap = new Map();
-  const SEVERITIES = ['', 'moderate', 'slight', 'mild', 'marked'];
-  const LOCATIONS = [];
-  const BILATERAL_ONLY_AREAS = [
-      "cerebellum", 
-      "basal ganglia",
-      "thalami"
-  ];
-  const SIDES = ['left', 'right', 'bilateral'];
-  
-  // 生成位置組合
-  // 基本區域
-  const BASE_AREAS = [
-      "frontal",
-      "temporal",
-      "parietal",
-      "occipital",
-      "cerebellar",
-      "basal ganglia",
-      "thalamus"
-  ];
-  
-  // 額外區域
-  const EXTRA_AREAS = [
-      "precuneus",
-      "anterior cingulate",
-      "posterior cingulate",
-      "posterior parietal",
-      "posterior temporal",
-      "posterior frontal",
-      "parietal association cortex",
-      "temporal association cortex",
-      "frontal association cortex",
-      "occipitotemporal",
-      "temporoparietal junction"
-  ];
-  
-  // 為每個基本區域添加側面 (除了 BILATERAL_ONLY_AREAS)
-  BASE_AREAS.forEach(area => {
-      if (BILATERAL_ONLY_AREAS.includes(area)) {
-          LOCATIONS.push(area);
-      } else {
-          SIDES.forEach(side => {
-              LOCATIONS.push(`${side} ${area}`);
-          });
-      }
+<script>
+  // 確保在頁面加載完成後執行初始化
+  document.addEventListener('DOMContentLoaded', function() {
+      initLocationMap();  // 初始化位置映射
+      initHandsontable();  // 初始化 Handsontable
+      initAtrophyCheckboxes(); // 初始化萎縮相關複選框
   });
   
-  // 為每個額外區域添加側面
-  EXTRA_AREAS.forEach(area => {
+  // Constants
+  const BILATERAL_ONLY_AREAS = [
+      'brain stem'
+  ];
+
+const AREAS = [
+      // 主要大腦葉區域
+      'frontal', 'parietal', 'temporal', 'occipital',
+      
+      // 複合區域
+      'fronto-parietal', 'parieto-temporal', 'temporo-occipital',
+      
+      // 前部區域
+      'anterior frontal', 'anterior fronto-parietal', 'anterior parietal', 'anterior temporal',
+      
+      // 後部區域
+      'posterior fronto-parietal', 'posterior parietal', 'posterior temporal',
+      
+      // 特定功能區域
+      'inferior frontal',
+      
+      // 內側和深部結構
+      'cingulate', 'anterior cingulate', 'posterior cingulate',
+      'medial temporal', 'mesial temporal',
+      'precuneus',
+      'basal ganglia',
+      'thalamus',
+      'insular',
+
+      // 小腦
+      'cerebellar',
+  ];
+
+
+  const SEVERITIES = ['', 'moderate', 'slight', 'mild', 'marked'];
+  const SIDES = ['left', 'right', 'bilateral'];
+
+  // Generate all possible combinations
+  const LOCATIONS = [];
+  
+  // Add bilateral-only areas
+  BILATERAL_ONLY_AREAS.forEach(area => {
+      LOCATIONS.push(area);
+  });
+
+  // Add areas that need sides
+  AREAS.forEach(area => {
       SIDES.forEach(side => {
           LOCATIONS.push(`${side} ${area}`);
       });
   });
-  
-  // 初始化畫面
-  document.addEventListener('DOMContentLoaded', function() {
-      initLocationMap();
-      initHandsontable();
-      renderAtrophyCheckboxes();
-      renderCerebellarDiaschisisCheckbox();
-  });
-  
-  // 初始化位置狀態映射
-  function initLocationMap() {
-      // 為每個位置添加一個空的狀態
-      LOCATIONS.forEach(location => {
-          locationStatusMap.set(location, '');
-      });
-  }
+
+  // Handsontable 實例
+  let hot;
   
   // 初始化 Handsontable
   function initHandsontable() {
       const container = document.getElementById('hot-container');
       
-      // 自定義單元格渲染器
-      function locationRenderer(instance, td, row, col, prop, value, cellProperties) {
+      // 初始數據 - 一個空行
+      const data = [['', '']];
+      
+      // 位置選擇器自定義渲染器
+      const locationRenderer = function(instance, td, row, col, prop, value, cellProperties) {
           Handsontable.renderers.TextRenderer.apply(this, arguments);
           
-          // 如果位置不是空的，添加一個刪除按鈕
-          if (value) {
-              const deleteBtn = document.createElement('button');
-              deleteBtn.textContent = '×';
-              deleteBtn.className = 'delete-btn';
-              deleteBtn.addEventListener('click', () => {
-                  instance.setDataAtCell(row, col, '');
-                  locationStatusMap.set(value, '');
-                  
-                  // 更新表格
-                  syncTableWithMap();
-              });
-              
-              // 清除單元格內容並添加刪除按鈕
-              td.innerHTML = '';
-              td.appendChild(document.createTextNode(value));
-              td.appendChild(deleteBtn);
+          // 如果值是從有效地點列表中選擇的，改變背景顏色
+          if (value && LOCATIONS.includes(value)) {
+              td.style.background = '#f0f8ff'; // 淺藍色背景
           }
-      }
+          
+          return td;
+      };
       
-      // 自定義自動完成編輯器
+      // 創建自訂編輯器
       class CustomAutocompleteEditor extends Handsontable.editors.TextEditor {
           constructor(hotInstance) {
               super(hotInstance);
-              
-              // 創建下拉選單
-              this.dropdown = document.createElement('div');
-              this.dropdown.className = 'custom-autocomplete-dropdown';
-              this.dropdown.style.position = 'absolute';
-              this.dropdown.style.display = 'none';
-              document.body.appendChild(this.dropdown);
-              
-              // 設置變量
-              this.items = [];
-              this.selectedItemIndex = -1;
-              this.selectedItem = null;
-              this.selectedRow = null;
-              
-              // 監聽輸入事件
-              this.TEXTAREA.addEventListener('input', () => {
-                  const value = this.TEXTAREA.value.trim();
-                  if (value.length > 0) {
-                      this.showDropdown();
-                  } else {
-                      this.hideDropdown();
-                  }
-              });
-              
-              // 監聽鍵盤事件
-              this.TEXTAREA.addEventListener('keydown', (e) => {
-                  if (this.dropdown.style.display === 'none') {
-                      return;
-                  }
-                  
-                  switch (e.key) {
-                      case 'ArrowDown':
-                          e.preventDefault();
-                          this.selectNextItem();
-                          break;
-                      case 'ArrowUp':
-                          e.preventDefault();
-                          this.selectPrevItem();
-                          break;
-                      case 'Enter':
-                          if (this.selectedItem) {
-                              e.preventDefault();
-                              this.selectCurrentItem();
-                              this.finishEditing();
-                          }
-                          break;
-                      case 'Escape':
-                          this.hideDropdown();
-                          break;
-                  }
-              });
-              
-              // 監聽文檔點擊事件，點擊外部時關閉下拉選單
-              document.addEventListener('click', (e) => {
-                  if (!this.dropdown.contains(e.target) && e.target !== this.TEXTAREA) {
-                      this.hideDropdown();
-                  }
-              });
           }
           
           prepare(row, col, prop, td, originalValue, cellProperties) {
               super.prepare(row, col, prop, td, originalValue, cellProperties);
-          }
-          
-          beginEditing(initialValue, event) {
-              super.beginEditing(initialValue, event);
               
-              // 如果有初始值，顯示下拉選單
-              const value = this.TEXTAREA.value.trim();
-              if (value.length > 0) {
-                  this.showDropdown();
+              // 建立下拉選單元素
+              if (!this.dropdown) {
+                  this.dropdown = document.createElement('div');
+                  this.dropdown.className = 'custom-autocomplete-dropdown';
+                  this.dropdown.style.position = 'absolute';
+                  this.dropdown.style.backgroundColor = 'white';
+                  this.dropdown.style.border = '1px solid #ccc';
+                  this.dropdown.style.maxHeight = '200px';
+                  this.dropdown.style.overflow = 'auto';
+                  this.dropdown.style.zIndex = 1000;
+                  this.dropdown.style.display = 'none';
+                  this.dropdown.style.width = '100%';
+                  document.body.appendChild(this.dropdown);
+                  
+                  // 防止點擊下拉選單關閉編輯器
+                  this.dropdown.addEventListener('mousedown', (e) => {
+                      e.stopPropagation();
+                  });
               }
           }
           
-          finishEditing(restoreOriginalValue, ctrlDown, callback) {
-              const value = this.TEXTAREA.value.trim();
+          open() {
+              super.open();
+              this.showDropdown();
               
-              // 檢查輸入的位置是否有效
-              if (value && !LOCATIONS.includes(value)) {
+              // 移除可能存在的全局事件監聽器
+              if (this.globalMousedownListener) {
+                  document.removeEventListener('mousedown', this.globalMousedownListener);
+              }
+              
+              // 監聽輸入事件
+              if (!this.inputListenerAdded) {
+                  this.TEXTAREA.addEventListener('input', () => {
+                      this.showDropdown();
+                  });
+                  
+                  // 處理按鍵事件
+                  this.TEXTAREA.addEventListener('keydown', (e) => {
+                      // 如果下拉選單不可見或沒有選項，讓方向鍵事件傳遞給 Handsontable
+                      if (this.dropdown.style.display === 'none' || !this.items || this.items.length === 0) {
+                          if (e.key !== 'Enter' && e.key !== 'Escape') {
+                              return;
+                          }
+                      }
+                      
+                      if (e.key === 'ArrowDown') {
+                          e.preventDefault();
+                          e.stopPropagation(); // 阻止事件傳播到 Handsontable
+                          this.selectNextItem();
+                      } else if (e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          e.stopPropagation(); // 阻止事件傳播到 Handsontable
+                          this.selectPrevItem();
+                      } else if (e.key === 'Enter') {
+                          if (this.selectedItem) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              this.selectCurrentItem();
+                              this.finishEditing();
+                          }
+                      } else if (e.key === 'Escape') {
+                          this.hideDropdown();
+                      } else if (e.key === 'Tab') {
+                          // 允許 Tab 鍵正常工作
+                          this.hideDropdown();
+                      }
+                  });
+                  
+                  this.inputListenerAdded = true;
+              }
+              
+              // 添加全局滑鼠點擊事件，防止點擊下拉列表外部關閉編輯器
+              this.globalMousedownListener = (e) => {
+                  if (this.dropdown.style.display === 'block' && 
+                      !this.dropdown.contains(e.target) && 
+                      !this.TEXTAREA.contains(e.target)) {
+                      // 點擊在下拉列表和輸入框外部
+                      this.hideDropdown();
+                  }
+              };
+              document.addEventListener('mousedown', this.globalMousedownListener);
+          }
+          
+          close() {
+              // 移除全局事件監聽器
+              if (this.globalMousedownListener) {
+                  document.removeEventListener('mousedown', this.globalMousedownListener);
+                  this.globalMousedownListener = null;
+              }
+              
+              this.hideDropdown();
+              super.close();
+          }
+          
+          finishEditing() {
+              if (this.selectedItem) {
+                  // 先保存選擇的值
+                  const value = this.selectedItem;
+                  
+                  // 清除狀態
+                  this.hideDropdown();
+                  
                   // 設置值並結束編輯
                   this.TEXTAREA.value = value;
                   
@@ -919,140 +906,630 @@
       
       hot.loadData(tableData);
       
-      // 更新小腦交叉失活狀態
-      document.dispatchEvent(new CustomEvent('locationStatusMapChanged'));
+      // 觸發自定義事件，通知 locationStatusMap 變化
+      const event = new CustomEvent('locationStatusMapChanged');
+      document.dispatchEvent(event);
   }
   
-  // React 組件: 腦萎縮相關選項
-  function renderAtrophyCheckboxes() {
-      const container = document.getElementById('atrophy-checkboxes');
+  // State management
+  let locationStatusMap = new Map();
+
+  // Initialize location map
+  function initLocationMap() {
+      locationStatusMap.clear();
+      LOCATIONS.forEach(location => {
+          locationStatusMap.set(location, '');
+      });
+  }
+
+  function createSearchableInput(row) {
+      function findMatches(searchTerm, locations) {
+          const searchWords = searchTerm.toLowerCase()
+              .split(' ')
+              .filter(word => word.length > 0);
+
+          if (searchWords.length === 0) {
+              return locations;
+          }
+
+          return locations.filter(location => {
+              const locationLower = location.toLowerCase();
+              return searchWords.every(word => locationLower.includes(word));
+          });
+      }
+
+      const container = document.createElement('div');
+      container.className = 'search-container';
+
+      const input = document.createElement('input');
+      input.className = 'search-input';
+      input.placeholder = 'Type to search...';
+
+      const dropdown = document.createElement('div');
+      dropdown.className = 'dropdown';
+
+      let selectedIndex = -1;
+      let currentMatches = [];
+
+      const formatDisplayLocation = (location) => {
+          if (location.includes('basal ganglia') && 
+              (location.startsWith('left ') || location.startsWith('right '))) {
+              return location.replace('basal ganglia', 'basal ganglion');
+          }
+          return location;
+      };
+
+      const selectItem = (index) => {
+          const items = dropdown.querySelectorAll('.dropdown-item');
+          
+          items.forEach(item => item.classList.remove('selected'));
+          
+          if (index >= 0 && index < items.length) {
+              selectedIndex = index;
+              const selectedItem = items[index];
+              selectedItem.classList.add('selected');
+              selectedItem.scrollIntoView({ block: 'nearest' });
+          }
+      };
+
+      input.addEventListener('keydown', (e) => {
+          const items = dropdown.querySelectorAll('.dropdown-item');
+          
+          switch(e.key) {
+              case 'ArrowDown':
+                  e.preventDefault();
+                  selectItem((selectedIndex + 1) % items.length);
+                  break;
+              case 'ArrowUp':
+                  e.preventDefault();
+                  selectItem(selectedIndex <= 0 ? items.length - 1 : selectedIndex - 1);
+                  break;
+              case 'Enter':
+                  e.preventDefault();
+                  if (selectedIndex >= 0 && selectedIndex < items.length) {
+                      const selectedItem = items[selectedIndex];
+                      input.value = selectedItem.textContent;
+                      dropdown.style.display = 'none';
+                      
+                      const select = row.querySelector('select');
+                      select.value = 'moderate';
+                      locationStatusMap.set(currentMatches[selectedIndex], 'moderate');
+                      
+                      setTimeout(() => {
+                          checkAndAddNewRow(true);
+                      }, 0);
+                  }
+                  break;
+              case 'Escape':
+                  dropdown.style.display = 'none';
+                  input.blur();
+                  break;
+          }
+      });
+
+      input.addEventListener('input', () => {
+          const searchTerm = input.value.toLowerCase();
+          currentMatches = findMatches(searchTerm, LOCATIONS).filter(loc => {
+              const currentSeverity = locationStatusMap.get(loc);
+              return !currentSeverity;
+          });
+
+          dropdown.innerHTML = '';
+          selectedIndex = -1;
+
+          currentMatches.forEach((match, index) => {
+              const item = document.createElement('div');
+              item.className = 'dropdown-item';
+              item.textContent = formatDisplayLocation(match);
+              
+              item.addEventListener('click', () => {
+                  input.value = formatDisplayLocation(match);
+                  dropdown.style.display = 'none';
+                  
+                  const select = row.querySelector('select');
+                  select.value = 'moderate';
+                  locationStatusMap.set(match, 'moderate');
+                  
+                  setTimeout(() => {
+                      checkAndAddNewRow(true);
+                  }, 0);
+              });
+
+              item.addEventListener('mouseover', () => {
+                  selectItem(index);
+              });
+
+              dropdown.appendChild(item);
+          });
+
+          dropdown.style.display = currentMatches.length ? 'block' : 'none';
+      });
+
+      input.addEventListener('focus', () => {
+          const event = new Event('input');
+          input.dispatchEvent(event);
+      });
+
+      document.addEventListener('click', (e) => {
+          if (!container.contains(e.target)) {
+              dropdown.style.display = 'none';
+          }
+      });
+
+      container.appendChild(input);
+      container.appendChild(dropdown);
+      return container;
+  }
+
+
+  function createSelect(options) {
+      const select = document.createElement('select');
+      options.forEach(option => {
+          const opt = document.createElement('option');
+          opt.value = option;
+          opt.textContent = option;
+          select.appendChild(opt);
+      });
       
-      window.atrophyFindings = {
+      select.addEventListener('change', (e) => {
+          const row = e.target.closest('.input-row');
+          const input = row.querySelector('.search-input');
+          if (input.value) {
+              locationStatusMap.set(input.value, e.target.value);
+          }
+          checkAndAddNewRow();
+      });
+      
+      return select;
+  }
+
+  // 在 script 标签中找到原来的 createRow 函数并替换
+  function createRow() {
+      const row = document.createElement('div');
+      row.className = 'input-row';
+      
+      // 创建删除按钮
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'delete-btn';
+      deleteBtn.innerHTML = '×';
+      deleteBtn.title = 'Delete row';
+      deleteBtn.onclick = (e) => {
+          e.preventDefault();
+          const thisRow = e.target.closest('.input-row');
+          const input = thisRow.querySelector('.search-input');
+          
+          // 如果这行有数据，从 locationStatusMap 中删除
+          if (input.value) {
+              locationStatusMap.delete(input.value);
+          }
+          
+          // 删除行
+          thisRow.remove();
+          
+          // 如果删除后没有空行，添加一个新行
+          checkAndAddNewRow();
+      };
+      
+      const searchableInput = createSearchableInput(row);
+      const severitySelect = createSelect(SEVERITIES);
+      
+      row.appendChild(deleteBtn);
+      row.appendChild(searchableInput);
+      row.appendChild(severitySelect);
+      
+      severitySelect.value = '';
+      
+      return row;
+  }
+
+  function checkAndAddNewRow(shouldFocus = false) {
+      const rows = document.querySelectorAll('.input-row');
+      const lastRow = rows[rows.length - 1];
+      
+      if (!lastRow) {
+          const newRow = createRow();
+          document.getElementById('input-grid').appendChild(newRow);
+          if (shouldFocus) {
+              setTimeout(() => {
+                  const input = newRow.querySelector('.search-input');
+                  input.focus();
+              }, 0);
+          }
+          return;
+      }
+
+      const input = lastRow.querySelector('.search-input');
+      const select = lastRow.querySelector('select');
+      
+      if (input.value.trim() !== '') {
+          locationStatusMap.set(input.value, select.value);
+          const newRow = createRow();
+          document.getElementById('input-grid').appendChild(newRow);
+          if (shouldFocus) {
+              setTimeout(() => {
+                  const input = newRow.querySelector('.search-input');
+                  input.focus();
+              }, 0);
+          }
+      }
+  }
+
+
+  function collectDataFromRows() {
+      const currentData = [];
+      
+      // 從 Handsontable 收集數據
+      for (let i = 0; i < hot.countRows(); i++) {
+          const location = hot.getDataAtCell(i, 0);
+          const severity = hot.getDataAtCell(i, 1);
+          
+          if (location && severity) {
+              let side = '';
+              let area = location;
+              
+              // 處理位置和側面信息
+              if (!BILATERAL_ONLY_AREAS.includes(location)) {
+                  SIDES.forEach(s => {
+                      if (location.startsWith(s + ' ')) {
+                          side = s;
+                          area = location.substring(s.length + 1);
+                      }
+                  });
+              }
+
+              currentData.push({
+                  side: side,
+                  area: area,
+                  severity: severity,
+                  fullLocation: location
+              });
+          }
+      }
+      
+      return currentData;
+  }
+  function getTableData() {
+      const data = [];
+      for (const [location, severity] of locationStatusMap) {
+          if (severity) {
+              let side = '';
+              let area = location;
+              
+              if (!BILATERAL_ONLY_AREAS.includes(location)) {
+                  SIDES.forEach(s => {
+                      if (location.startsWith(s + ' ')) {
+                          side = s;
+                          area = location.substring(s.length + 1);
+                      }
+                  });
+              }
+
+              data.push({
+                  side: side,
+                  area: area,
+                  severity: severity,
+                  fullLocation: location
+              });
+          }
+      }
+      return data;
+  }
+
+  // 在 script 标签中找到原来的 formatRegions 函数并替换
+  function formatRegions(regions, desc) {
+      if (regions.length === 0) return '';
+      
+      // 创建一个映射来存储完整位置及其在原始数组中的索引
+      const locationOrder = new Map();
+      LOCATIONS.forEach((loc, index) => {
+          locationOrder.set(loc, index);
+      });
+      
+      // 按照原始数组的顺序排序区域
+      const sortedRegions = [...regions].sort((a, b) => {
+          const aFullLoc = a.side ? `${a.side} ${a.area}` : a.area;
+          const bFullLoc = b.side ? `${b.side} ${b.area}` : b.area;
+          return locationOrder.get(aFullLoc) - locationOrder.get(bFullLoc);
+      });
+      
+      const locDescriptions = sortedRegions.map(r => {
+          if (BILATERAL_ONLY_AREAS.includes(r.area)) {
+              return r.area;
+          } else {
+              const sidePrefix = r.side ? `${r.side} ` : '';
+              // 处理 basal ganglia/ganglion 的特殊情况
+              let area = r.area;
+              if (area === 'basal ganglia' && r.side && r.side !== 'bilateral') {
+                  area = 'basal ganglion';  // 单侧时使用单数形式
+              }
+              return `${sidePrefix}${area}`;
+          }
+      });
+      
+      if (locDescriptions.length === 1) {
+          // 如果只有一個區域，但它是雙側的，使用複數形式
+          const isBilateral = sortedRegions[0].side === 'bilateral';
+          return `${desc} in the ${locDescriptions[0]} ${isBilateral ? 'regions' : 'region'}`;
+      }
+      if (locDescriptions.length === 2) {
+          return `${desc} in the ${locDescriptions[0]} and ${locDescriptions[1]} regions`;
+      }
+      return `${desc} in the ${locDescriptions.slice(0, -1).join(', ')}, and ${locDescriptions[locDescriptions.length - 1]} regions`;
+  }
+
+  function createHypoperfusionText(regions, message) {
+      if (regions.length === 0) return '';
+      
+      // 檢查是否應該使用複數形式
+      const usePlural = regions.length > 1 || regions.some(region => region.includes('bilateral'));
+      
+      const regionText = regions.join(", ") + " region" + (usePlural ? "s" : "");
+      return "Hypoperfusion in the " + regionText + " " + message;
+  }
+
+  function capitalizeFirstLetter(string) {
+      return string.charAt(0).toUpperCase() + string.slice(1);
+  }
+
+
+  function pluralizeRegions(text) {
+    // Helper function to process a single part
+    function processRegionText(part) {
+      if (part.trim().endsWith('region')) {
+        if (part.includes(' and ') || part.includes('bilateral')) {
+          return part.replace(/region$/, 'regions');
+        }
+      }
+      return part;
+    }
+
+    // First split by semicolons
+    let semicolonParts = text.split(';');
+    
+    // Process each semicolon-separated part, which might contain periods
+    return semicolonParts.map(semicolonPart => {
+      // Split each semicolon part by periods
+      let periodParts = semicolonPart.split('.');
+      
+      // Process each period-separated part
+      return periodParts.map(periodPart => {
+        return processRegionText(periodPart.trim());
+      }).join('.');  // Rejoin with periods
+    }).join(';');  // Rejoin with semicolons
+  }
+
+  function processReportText(text) {
+    if (!text) return text;
+    
+    // If there are no semicolons or periods, process the whole text
+    if (!text.includes(';') && !text.includes('.')) {
+      if (text.endsWith('region') && 
+          (text.includes(' and ') || text.includes('bilateral'))) {
+        return text.replace(/region$/, 'regions');
+      }
+      return text;
+    }
+    
+    // Process text with pluralization
+    return pluralizeRegions(text);
+  }
+  
+  function generateReports() {
+      const data = collectDataFromRows();
+      const atrophyFindings = window.atrophyFindings || {
           fissures: false,
           ventricles: false,
           sulci: false,
           interhemisphericFissures: false
       };
-      
-      // 創建容器
-      const boxDiv = document.createElement('div');
-      boxDiv.style.marginTop = '1rem';
-      boxDiv.style.padding = '1rem';
-      boxDiv.style.border = '1px solid #ddd';
-      boxDiv.style.borderRadius = '4px';
-      boxDiv.style.backgroundColor = '#f5f5f5';
-      
-      // 標題
-      const title = document.createElement('h3');
-      title.textContent = 'Atrophy Findings:';
-      title.style.fontSize = '0.875rem';
-      title.style.fontWeight = '500';
-      title.style.marginBottom = '0.5rem';
-      boxDiv.appendChild(title);
-      
-      // 複選框網格
-      const gridDiv = document.createElement('div');
-      gridDiv.style.display = 'grid';
-      gridDiv.style.gridTemplateColumns = 'repeat(2, 1fr)';
-      gridDiv.style.gap = '1rem';
-      
-      // 選項
-      const options = [
-          {id: 'fissures', name: 'Cerebral Fissures'},
-          {id: 'ventricles', name: 'Ventricles'},
-          {id: 'sulci', name: 'Cerebral Sulci'},
-          {id: 'interhemisphericFissures', name: 'Interhemispheric Fissures'}
-      ];
-      
-      options.forEach(option => {
-          const label = document.createElement('label');
-          label.style.display = 'flex';
-          label.style.alignItems = 'center';
-          label.style.gap = '0.5rem';
+
+      function generateAtrophyText() {
+          const findings = [];
+          if (atrophyFindings.fissures) findings.push("cerebral fissures");
+          if (atrophyFindings.ventricles) findings.push("ventricles");
+          if (atrophyFindings.sulci) findings.push("cerebral sulci");
+          if (atrophyFindings.interhemisphericFissures) findings.push("interhemispheric fissures");
           
-          const checkbox = document.createElement('input');
-          checkbox.type = 'checkbox';
-          checkbox.id = option.id;
-          checkbox.name = option.id;
-          
-          checkbox.addEventListener('change', (e) => {
-              window.atrophyFindings[option.id] = e.target.checked;
+          if (findings.length === 0) return "";
+          if (findings.length === 1) return `Prominent ${findings[0]} are seen.`;
+          if (findings.length === 2) return `Prominent ${findings[0]} and ${findings[1]} are seen.`;
+          const last = findings.pop();
+          return `Prominent ${findings.join(', ')}, and ${last} are seen.`;
+      }
+
+      function formatCerebellarDiaschisisText(data, severity) {
+          const cerebellarRegions = [];
+          data.forEach(item => {
+              if (item.area.includes('cerebellar')) {
+                  cerebellarRegions.push(item.fullLocation);
+              }
           });
           
-          const span = document.createElement('span');
-          span.textContent = option.name;
-          span.style.fontSize = '0.875rem';
+          if (cerebellarRegions.length === 0) return '';
           
-          label.appendChild(checkbox);
-          label.appendChild(span);
-          gridDiv.appendChild(label);
-      });
-      
-      boxDiv.appendChild(gridDiv);
-      container.appendChild(boxDiv);
-  }
-  
-  // React 組件: 小腦交叉失活選項
-  function renderCerebellarDiaschisisCheckbox() {
-      const container = document.getElementById('atrophy-checkboxes');
-      
-      window.cerebellarDiaschisis = false;
-      
-      const boxDiv = document.createElement('div');
-      boxDiv.style.marginTop = '0.5rem';
-      boxDiv.style.padding = '1rem';
-      boxDiv.style.border = '1px solid #ddd';
-      boxDiv.style.borderRadius = '4px';
-      boxDiv.style.backgroundColor = '#f5f5f5';
-      
-      const label = document.createElement('label');
-      label.style.display = 'flex';
-      label.style.alignItems = 'center';
-      label.style.gap = '0.5rem';
-      label.style.opacity = '0.5';
-      label.style.cursor = 'not-allowed';
-      
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.disabled = true;
-      
-      checkbox.addEventListener('change', (e) => {
-          window.cerebellarDiaschisis = e.target.checked;
-      });
-      
-      const span = document.createElement('span');
-      span.textContent = 'Cerebellar Diaschisis';
-      span.style.fontSize = '0.875rem';
-      
-      // 添加事件監聽
-      const updateCheckbox = () => {
-          const cerebellarLocations = ['left cerebellar', 'right cerebellar', 'bilateral cerebellar'];
-          let hasValidLocation = false;
-          
-          for (const [location, severity] of locationStatusMap) {
-              if (cerebellarLocations.some(cl => location.includes(cl)) && severity && severity !== '') {
-                  hasValidLocation = true;
+          let severityText = '';
+          switch(severity) {
+              case 'marked':
+              case 'moderate':
+                  severityText = 'suspect cross cerebellar diaschisis';
                   break;
+              case 'mild':
+                  severityText = 'possible cross cerebellar diaschisis';
+                  break;
+              case 'slight':
+                  severityText = 'cross cerebellar diaschisis cannot be excluded completely';
+                  break;
+          }
+          
+          // 檢查是否應該使用複數形式（如果有多個區域或包含雙側區域）
+          const usePlural = cerebellarRegions.length > 1 || cerebellarRegions.some(region => region.includes('bilateral'));
+          
+          return `Hypoperfusion in the ${cerebellarRegions.join(' and ')} region${usePlural ? 's' : ''}, ${severityText}`;
+      }
+
+      function formatText(text) {
+          text = text.charAt(0).toUpperCase() + text.slice(1);
+          return text
+              .replace(/\s+/g, ' ')
+              .replace(/\.+/g, '.')
+              .replace(/\.\s*\./g, '.')
+              .replace(/\./g, '. ')
+              .trim()
+              .replace(/\s*\.$/, '.')
+              .replace(/\s\s/g, ' ');
+      }
+
+      function formatNumberedText(impressionArray) {
+          if (impressionArray.length === 0) return '';
+          if (impressionArray.length === 1) return formatText(impressionArray[0]);
+          
+          let result = '';
+          for (let i = 0; i < impressionArray.length; i++) {
+              let text = formatText(impressionArray[i]);
+              // 確保每個項目都以句點結尾
+              if (!text.endsWith('.')) {
+                  text += '.';
+              }
+              result += `\n${i + 1}. ${text}`;
+          }
+          return result;
+      }
+
+      // Generate findings text
+      const regAlz = ["posterior cingulate", "posterior parietal", "precuneus"];
+      const regDlb = ["occipital"];
+
+      const valMar = data.filter(x => x.severity === 'marked');
+      const valMod = data.filter(x => x.severity === 'moderate');
+      const valMil = data.filter(x => x.severity === 'mild');
+      const valSli = data.filter(x => x.severity === 'slight');
+      const atrophyText = generateAtrophyText();
+
+      const txtMar = formatRegions(valMar, 'markedly decreased radioactivity');
+      const txtMod = formatRegions(valMod, 'decreased radioactivity');
+      const txtMil = formatRegions(valMil, 'mildly decreased radioactivity');
+      const txtSli = formatRegions(valSli, 'slightly decreased radioactivity');
+
+      let txtFnd = valMar.concat(valMod, valMil, valSli).length === 0 ? 
+          'Tc-99m ECD brain perfusion scan with SPECT shows no definite abnormal radioactivity in the brain.' :
+          'Tc-99m ECD brain perfusion scan with SPECT shows ' + [txtMar, txtMod, txtMil, txtSli].filter(x => x !== '').join("; ") + ". ";
+
+      if (atrophyText) {
+          txtFnd = txtFnd + (txtFnd.endsWith('  ') ? '' : txtFnd.endsWith(' ') ? '' : ' ') + atrophyText;
+      }
+
+      // Generate impression text
+      let baseImpressions = [];
+
+      if (window.cerebellarDiaschisis) {
+          const nonCerebellarData = data.filter(item => !item.area.includes('cerebellar'));
+          const cerebellarData = data.filter(item => item.area.includes('cerebellar'));
+
+          // Generate main impression text without cerebellar regions
+          const valMarNonCereb = nonCerebellarData.filter(x => x.severity === 'marked');
+          const valModNonCereb = nonCerebellarData.filter(x => x.severity === 'moderate');
+          const valMilNonCereb = nonCerebellarData.filter(x => x.severity === 'mild');
+          const valSliNonCereb = nonCerebellarData.filter(x => x.severity === 'slight');
+
+          const txtMarNonCereb = formatRegions(valMarNonCereb, 'marked hypoperfusion');
+          const txtModNonCereb = formatRegions(valModNonCereb, 'hypoperfusion');
+          const txtMilNonCereb = formatRegions(valMilNonCereb, 'mild hypoperfusion');
+          const txtSliNonCereb = formatRegions(valSliNonCereb, 'suspicious hypoperfusion');
+
+          let mainText = [txtMarNonCereb, txtModNonCereb, txtMilNonCereb, txtSliNonCereb]
+              .filter(x => x !== '')
+              .join('; ');
+
+          if (nonCerebellarData.length > 0) {
+              // 確保文字以句點結尾
+              baseImpressions.push(ensurePeriodEnding(mainText));
+          }
+
+          if (cerebellarData.length > 0) {
+              const maxSeverity = cerebellarData.reduce((max, item) => {
+                  const severityOrder = { marked: 4, moderate: 3, mild: 2, slight: 1 };
+                  return severityOrder[item.severity] > severityOrder[max] ? item.severity : max;
+              }, 'slight');
+
+              const diaschisisText = formatCerebellarDiaschisisText(cerebellarData, maxSeverity);
+              if (diaschisisText) {
+                  baseImpressions.push(ensurePeriodEnding(diaschisisText));
               }
           }
+      } else {
+          const mainImp = valMar.concat(valMod, valMil, valSli).length === 0 ?
+              'No definite abnormal cerebral perfusion is detected.' :
+              txtFnd.replace('Tc-99m ECD brain perfusion scan with SPECT shows ', '')
+                  .replace('markedly decreased radioactivity', 'marked hypoperfusion')
+                  .replace('decreased radioactivity', 'hypoperfusion')
+                  .replace('mildly decreased radioactivity', 'mild hypoperfusion')
+                  .replace('slightly decreased radioactivity', 'suspicious hypoperfusion')
+                  .replace(/\.\s*Prominent.*?are seen\./, '');
           
-          checkbox.disabled = !hasValidLocation;
-          label.style.opacity = hasValidLocation ? '1' : '0.5';
-          label.style.cursor = hasValidLocation ? 'pointer' : 'not-allowed';
-          
-          if (!hasValidLocation) {
-              checkbox.checked = false;
-              window.cerebellarDiaschisis = false;
+          baseImpressions.push(ensurePeriodEnding(mainImp));
+      }
+
+      if (baseImpressions.length === 0) {
+          baseImpressions.push('No definite abnormal cerebral perfusion is detected.');
+      }
+
+      // Generate ALZ and DLB specific texts
+      let posAlz = regAlz.filter(x => data.some(d => d.area === x));
+      let posDlb = regDlb.filter(x => data.some(d => d.area === x));
+
+      let txtAlz = createHypoperfusionText(posAlz, "has been reported to be commonly observed in patients with Alzheimer's disease.");
+      let txtDlb = createHypoperfusionText(posDlb, "is considered a supportive biomarker of dementia with Lewy bodies.");
+
+      let txtAlzCor = posDlb.length > 0 ? 
+          `${posAlz.length > 0 ? "However" : "Besides"}, hypoperfusion in the occipital area is usually not observed in Alzheimer's disease. Clinical correlation is recommended.` : "";
+      let txtDlbCor = posAlz.length > 0 ? "Clinical correlation is recommended." : "";
+
+      txtAlz = txtAlz || "There is no apparently decreased perfusion in the parietal association areas, posterior cingulate, precuneus, which are the regions commonly affected in Alzheimer's disease.";
+      txtDlb = txtDlb || "There is no definite evidence of occipital hypoperfusion, a supportive biomarker of dementia with Lewy bodies, observed in this patient.";
+
+      if (txtAlzCor.length > 0) txtAlz = txtAlz + txtAlzCor;
+      if (txtDlbCor.length > 0) txtDlb = txtDlb + txtDlbCor;
+
+      // Create final impressions arrays
+      let impressions = [...baseImpressions];
+      
+      // For ALZ and DLB impressions, only add the supportive text to non-cerebellar findings
+      let alzImpressions = baseImpressions.map(imp => {
+          // If this is a cerebellar diaschisis impression, don't add ALZ text
+          if (imp.includes('cerebellar diaschisis')) {
+              return imp;
           }
+          return imp + (imp.endsWith('.') ? '' : '.') + txtAlz;
+      });
+      
+      let dlbImpressions = baseImpressions.map(imp => {
+          // If this is a cerebellar diaschisis impression, don't add DLB text
+          if (imp.includes('cerebellar diaschisis')) {
+              return imp;
+          }
+          return imp + (imp.endsWith('.') ? '' : '.') + txtDlb;
+      });
+
+      // Add atrophy finding if present
+      if (atrophyText) {
+          // 檢查 ventricles 是否被選中
+          const atrophyDescription = atrophyFindings.ventricles 
+              ? "Suspect cerebral cortical atrophy with ventriculomegaly." 
+              : "Suspect cerebral cortical atrophy.";
+              
+          impressions.push(atrophyDescription);
+          alzImpressions.push(atrophyDescription);
+          dlbImpressions.push(atrophyDescription);
+      }
+
+      return {
+          findings: txtFnd,
+          impression: formatNumberedText(impressions),
+          alz: formatNumberedText(alzImpressions),
+          dlb: formatNumberedText(dlbImpressions)
       };
-      
-      document.addEventListener('locationStatusMapChanged', updateCheckbox);
-      
-      label.appendChild(checkbox);
-      label.appendChild(span);
-      boxDiv.appendChild(label);
-      container.appendChild(boxDiv);
   }
+
 
   function clearTable() {
       // 清空 Handsontable
@@ -1086,20 +1563,7 @@
           // Debug output
           console.log('Starting copy process for type:', type);
           
-          // 使用導入的generateReports函數
-          const reports = generateReports(
-              hot, 
-              window.atrophyFindings || {
-                  fissures: false,
-                  ventricles: false,
-                  sulci: false,
-                  interhemisphericFissures: false
-              }, 
-              window.cerebellarDiaschisis, 
-              LOCATIONS, 
-              BILATERAL_ONLY_AREAS, 
-              SIDES
-          );
+          const reports = generateReports();
           console.log('Generated reports:', reports);
           
           const text = reports[type];
@@ -1145,7 +1609,138 @@
       }
   }
 
-  // 暴露到全局，讓按鈕可以訪問
-  window.copyReport = copyReport;
-  window.clearTable = clearTable;
+  // 處理所有文字，確保以句點結尾
+  function ensurePeriodEnding(text) {
+      if (text && !text.endsWith('.')) {
+          return text + '.';
+      }
+      return text;
+  }
+
+  // 初始化萎縮相關複選框和小腦交叉失活複選框
+  function initAtrophyCheckboxes() {
+    // 初始化全局變數
+    window.atrophyFindings = {
+      fissures: false,
+      ventricles: false,
+      sulci: false,
+      interhemisphericFissures: false
+    };
+    
+    window.cerebellarDiaschisis = false;
+    
+    // 創建萎縮相關複選框
+    const atrophyContainer = document.createElement('div');
+    atrophyContainer.style.marginTop = '1rem';
+    atrophyContainer.style.padding = '1rem';
+    atrophyContainer.style.border = '1px solid #ddd';
+    atrophyContainer.style.borderRadius = '4px';
+    atrophyContainer.style.backgroundColor = '#f5f5f5';
+    
+    const title = document.createElement('h3');
+    title.textContent = 'Atrophy Findings:';
+    title.style.fontSize = '0.875rem';
+    title.style.fontWeight = '500';
+    title.style.marginBottom = '0.5rem';
+    atrophyContainer.appendChild(title);
+    
+    const checkboxesGrid = document.createElement('div');
+    checkboxesGrid.style.display = 'grid';
+    checkboxesGrid.style.gridTemplateColumns = 'repeat(2, 1fr)';
+    checkboxesGrid.style.gap = '1rem';
+    
+    const options = [
+      {id: 'fissures', name: 'Cerebral Fissures'},
+      {id: 'ventricles', name: 'Ventricles'},
+      {id: 'sulci', name: 'Cerebral Sulci'},
+      {id: 'interhemisphericFissures', name: 'Interhemispheric Fissures'}
+    ];
+    
+    options.forEach(option => {
+      const label = document.createElement('label');
+      label.style.display = 'flex';
+      label.style.alignItems = 'center';
+      label.style.gap = '0.5rem';
+      
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.id = option.id;
+      checkbox.name = option.id;
+      
+      checkbox.addEventListener('change', (e) => {
+        window.atrophyFindings[option.id] = e.target.checked;
+      });
+      
+      const span = document.createElement('span');
+      span.textContent = option.name;
+      span.style.fontSize = '0.875rem';
+      
+      label.appendChild(checkbox);
+      label.appendChild(span);
+      checkboxesGrid.appendChild(label);
+    });
+    
+    atrophyContainer.appendChild(checkboxesGrid);
+    
+    // 創建小腦交叉失活複選框
+    const cerebContainer = document.createElement('div');
+    cerebContainer.style.marginTop = '0.5rem';
+    cerebContainer.style.padding = '1rem';
+    cerebContainer.style.border = '1px solid #ddd';
+    cerebContainer.style.borderRadius = '4px';
+    cerebContainer.style.backgroundColor = '#f5f5f5';
+    
+    const cerebLabel = document.createElement('label');
+    cerebLabel.style.display = 'flex';
+    cerebLabel.style.alignItems = 'center';
+    cerebLabel.style.gap = '0.5rem';
+    cerebLabel.style.opacity = '0.5';
+    cerebLabel.style.cursor = 'not-allowed';
+    
+    const cerebCheckbox = document.createElement('input');
+    cerebCheckbox.type = 'checkbox';
+    cerebCheckbox.disabled = true;
+    cerebCheckbox.checked = false;
+    
+    cerebCheckbox.addEventListener('change', (e) => {
+      window.cerebellarDiaschisis = e.target.checked;
+    });
+    
+    const cerebSpan = document.createElement('span');
+    cerebSpan.textContent = 'Cerebellar Diaschisis';
+    cerebSpan.style.fontSize = '0.875rem';
+    
+    cerebLabel.appendChild(cerebCheckbox);
+    cerebLabel.appendChild(cerebSpan);
+    cerebContainer.appendChild(cerebLabel);
+    
+    // 監聽位置狀態變更
+    const updateCerebCheckbox = () => {
+      const cerebellarLocations = ['left cerebellar', 'right cerebellar', 'bilateral cerebellar'];
+      let hasValidLocation = false;
+      
+      for (const [location, severity] of locationStatusMap) {
+        if (cerebellarLocations.some(cl => location.includes(cl)) && severity && severity !== '') {
+          hasValidLocation = true;
+          break;
+        }
+      }
+      
+      cerebCheckbox.disabled = !hasValidLocation;
+      cerebLabel.style.opacity = hasValidLocation ? '1' : '0.5';
+      cerebLabel.style.cursor = hasValidLocation ? 'pointer' : 'not-allowed';
+      
+      if (!hasValidLocation) {
+        cerebCheckbox.checked = false;
+        window.cerebellarDiaschisis = false;
+      }
+    };
+    
+    document.addEventListener('locationStatusMapChanged', updateCerebCheckbox);
+    
+    // 將兩個容器添加到頁面
+    const checkboxesContainer = document.getElementById('atrophy-checkboxes');
+    checkboxesContainer.appendChild(atrophyContainer);
+    checkboxesContainer.appendChild(cerebContainer);
+  }
 </script>
