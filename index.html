@@ -959,6 +959,11 @@ const AREAS = [
   function sendReportData() {
     // 收集報告數據
     const reportData = {
+      type: 'GUI_REPORT_RESULT',
+      areas: {
+        Findings: document.getElementById('findings-area').value,
+        Impression: document.getElementById('impression-area').value
+      },
       Findings: document.getElementById('findings-area').value,
       Impression: document.getElementById('impression-area').value
     };

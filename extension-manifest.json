@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "generator": {
+    "id": "ecd-report-generator",
+    "name": "ECD Report Generator",
+    "webappUrl": "https://ecd-report-generator.vercel.app/"
+  },
+  "reports": [
+    {
+      "mciid": "9310604",
+      "name": "Tc-99m ECD Brain Perfusion Scan",
+      "areas": [
+        {
+          "key": "IO",
+          "label": "IO",
+          "webnmId": "keyword",
+          "read": true,
+          "write": false
+        },
+        {
+          "key": "Findings",
+          "label": "Findings",
+          "webnmId": "area_215",
+          "read": true,
+          "write": true
+        },
+        {
+          "key": "Impression",
+          "label": "Impression",
+          "webnmId": "area_216",
+          "read": true,
+          "write": true
+        }
+      ]
+    }
+  ]
+}
