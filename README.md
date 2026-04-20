@@ -98,7 +98,17 @@ const SIDES = ['left', 'right', 'bilateral'];
 
 1. `sendReportData()` - 發送報告數據到opener窗口
    - 收集Findings和Impression文本
+   - 使用 `GUI_REPORT_RESULT.areas` 作為主要 payload，並暫時保留 legacy top-level fields
    - 使用postMessage發送到opener窗口
+
+## GUI Extension Integration
+
+- Manifest: `/extension-manifest.json`
+- MCIID: `9310604`
+- Canonical areas:
+  - `IO -> keyword` is read-only context
+  - `Findings -> area_215` and `Impression -> area_216` are writable
+- Draft state is sent with `GUI_REPORT_DRAFT` so `gui-report-extension` can cache it locally by `referno` for 5 days.
 
 ## 事件系統
 
@@ -171,4 +181,4 @@ const SIDES = ['left', 'right', 'bilateral'];
 
 - 系統在關鍵點添加了console.log記錄
 - 使用瀏覽器開發工具監視locationStatusMap和事件流
-- 使用CustomEvent檢查數據流動 
+- 使用CustomEvent檢查數據流動

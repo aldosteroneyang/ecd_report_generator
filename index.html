@@ -257,6 +257,43 @@
 </body>
 
 <script>
+  function decodeTransferData(encodedData) {
+    try {
+      return decodeURIComponent(escape(atob(encodedData)));
+    } catch (error) {
+      return atob(encodedData);
+    }
+  }
+
+  function readExtensionData() {
+    const encodedData = new URLSearchParams(window.location.search).get('data');
+    if (!encodedData) return null;
+
+    try {
+      const data = JSON.parse(decodeTransferData(encodedData));
+      return data && data.type === 'GUI_EXTENSION_DATA' ? data : null;
+    } catch (error) {
+      console.warn('Unable to parse extension data:', error);
+      return null;
+    }
+  }
+
+  const guiExtensionData = readExtensionData();
+  window.guiExtensionData = guiExtensionData;
+  window.guiExtensionAreas = guiExtensionData?.areas || {};
+  window.ioContext = getAreaValue(guiExtensionData, 'IO');
+
+  function getAreaValue(data, key) {
+      const areaValue = data?.areas?.[key];
+      if (areaValue && typeof areaValue === 'object' && Object.prototype.hasOwnProperty.call(areaValue, 'value')) {
+          return areaValue.value || '';
+      }
+      if (typeof areaValue === 'string') {
+          return areaValue;
+      }
+      return data?.textValues?.[key] || '';
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
       initLocationMap();  // 初始化位置映射
       initHandsontable();  // 初始化 Handsontable
@@ -273,11 +310,21 @@
       // 確保在所有初始化完成後立即執行報告生成
       // requestAnimationFrame確保在下一幀渲染前執行，確保DOM已完全更新
       requestAnimationFrame(() => {
+          if (guiExtensionData?.cache?.generatorState) {
+              restoreGeneratorStateFromCache(guiExtensionData.cache.generatorState);
+          }
           if (typeof updateReportAreas === 'function') {
               console.log("初始載入完畢，執行updateReportAreas");
               updateReportAreas();
           }
+          if (guiExtensionData?.cache) {
+              showNotification('Loaded cached draft for this referno');
+          }
       });
+
+      document.addEventListener('locationStatusMapChanged', scheduleDraftSave);
+      document.getElementById('alz-checkbox').addEventListener('change', scheduleDraftSave);
+      document.getElementById('dlb-checkbox').addEventListener('change', scheduleDraftSave);
   });
   
   // Constants
@@ -823,6 +870,73 @@ const AREAS = [
           notification.style.display = 'none';
       }, 2000);
   }
+
+  function getGeneratorState() {
+      return {
+          tableData: hot ? hot.getData() : [],
+          alz: document.getElementById('alz-checkbox')?.checked || false,
+          dlb: document.getElementById('dlb-checkbox')?.checked || false,
+          atrophyFindings: { ...(window.atrophyFindings || {}) },
+          cerebellarDiaschisis: window.cerebellarDiaschisis === true,
+          updatedAt: new Date().toISOString()
+      };
+  }
+
+  function restoreGeneratorStateFromCache(generatorState) {
+      if (!generatorState || typeof generatorState !== 'object') return;
+
+      if (Array.isArray(generatorState.tableData) && hot) {
+          hot.loadData(generatorState.tableData);
+          initLocationMap();
+          generatorState.tableData.forEach(row => {
+              const location = row && row[0];
+              const severity = row && row[1];
+              if (location) {
+                  locationStatusMap.set(location, severity || '');
+              }
+          });
+          syncTableWithMap();
+      }
+
+      const alzCheckbox = document.getElementById('alz-checkbox');
+      const dlbCheckbox = document.getElementById('dlb-checkbox');
+      if (alzCheckbox) alzCheckbox.checked = generatorState.alz === true;
+      if (dlbCheckbox) dlbCheckbox.checked = generatorState.dlb === true;
+
+      if (generatorState.atrophyFindings && typeof generatorState.atrophyFindings === 'object') {
+          window.atrophyFindings = { ...window.atrophyFindings, ...generatorState.atrophyFindings };
+          Object.entries(window.atrophyFindings).forEach(([key, value]) => {
+              const checkbox = document.getElementById(key);
+              if (checkbox) checkbox.checked = value === true;
+          });
+      }
+
+      window.cerebellarDiaschisis = generatorState.cerebellarDiaschisis === true;
+      document.dispatchEvent(new CustomEvent('locationStatusMapChanged'));
+  }
+
+  function buildCurrentReportAreas() {
+      return {
+          Findings: { value: document.getElementById('findings-area')?.value || '' },
+          Impression: { value: document.getElementById('impression-area')?.value || '' }
+      };
+  }
+
+  let draftSaveTimer = null;
+  function postDraftToOpener() {
+      if (!window.opener) return;
+
+      window.opener.postMessage({
+          type: 'GUI_REPORT_DRAFT',
+          areas: buildCurrentReportAreas(),
+          generatorState: getGeneratorState()
+      }, '*');
+  }
+
+  function scheduleDraftSave() {
+      window.clearTimeout(draftSaveTimer);
+      draftSaveTimer = window.setTimeout(postDraftToOpener, 800);
+  }
   
   // 初始化萎縮相關複選框和小腦交叉失活複選框
   function initAtrophyCheckboxes() {
@@ -958,14 +1072,13 @@ const AREAS = [
   // 收集報告數據並發送給開啟窗口的函數
   function sendReportData() {
     // 收集報告數據
+    const areas = buildCurrentReportAreas();
     const reportData = {
       type: 'GUI_REPORT_RESULT',
-      areas: {
-        Findings: document.getElementById('findings-area').value,
-        Impression: document.getElementById('impression-area').value
-      },
-      Findings: document.getElementById('findings-area').value,
-      Impression: document.getElementById('impression-area').value
+      areas,
+      generatorState: getGeneratorState(),
+      Findings: areas.Findings.value,
+      Impression: areas.Impression.value
     };
 
     // 檢查是否有 window.opener
